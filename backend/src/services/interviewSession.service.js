@@ -66,12 +66,9 @@ export const interviewSessionService = {
       sequenceNumber: messages.length + 1,
     });
 
-    const updatedSession = await interviewRepository.updateSession(sessionIdValue, {
-      conversationHistory: [...(session.conversationHistory || []), { sender: 'candidate', type: 'answer', text: transcript, sequenceNumber: messages.length + 1 }],
-    });
-
+    const sessionContext = session.toObject?.() || session;
     const aiResult = await aiQuestionService.generateNextQuestion({
-      ...updatedSession,
+      ...sessionContext,
       candidateAnswerTranscript: transcript,
       conversationHistory: await interviewRepository.listMessages(sessionIdValue),
     });

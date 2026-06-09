@@ -28,7 +28,7 @@ export const interviewRepository = {
     return memoryStore.sessions.find((item) => item.id === id) || null;
   },
   async updateSession(id, patch) {
-    if (isDbConnected()) return InterviewSession.findByIdAndUpdate(id, patch, { new: true });
+    if (isDbConnected()) return InterviewSession.findByIdAndUpdate(id, patch, { returnDocument: 'after' });
     const session = await this.findSessionById(id);
     if (!session) return null;
     Object.assign(session, patch, { updatedAt: new Date() });
