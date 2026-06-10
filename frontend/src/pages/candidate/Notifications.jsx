@@ -14,10 +14,10 @@ export default function Notifications() {
             <Card key={item.id} animate={false}>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="font-semibold text-slate-950">{item.title}</h2>
-                  <p className="mt-1 text-sm text-slate-600">{item.body}</p>
+                  <h2 className="font-semibold" style={{ color: 'var(--text-primary)' }}>{item.title}</h2>
+                  <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>{item.body}</p>
                 </div>
-                <span className="text-xs text-slate-500">{formatRelativeTime(item.createdAt)}</span>
+                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{formatRelativeTime(item.createdAt)}</span>
               </div>
             </Card>
           ))}

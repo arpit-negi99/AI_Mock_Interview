@@ -28,10 +28,18 @@ export default function QuestionBank() {
         <DataToolbar search={search} onSearchChange={setSearch} filter={filter} onFilterChange={setFilter} filterOptions={[{ value: 'all', label: 'All difficulties' }, { value: 'medium', label: 'Medium' }, { value: 'hard', label: 'Hard' }]} />
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500"><tr><th className="p-3">ID</th><th className="p-3">Skill</th><th className="p-3">Type</th><th className="p-3">Difficulty</th><th className="p-3">Updated</th></tr></thead>
-            <tbody className="divide-y divide-slate-100">
+            <thead style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>
+              <tr><th className="p-3">ID</th><th className="p-3">Skill</th><th className="p-3">Type</th><th className="p-3">Difficulty</th><th className="p-3">Updated</th></tr>
+            </thead>
+            <tbody style={{ color: 'var(--text-secondary)' }}>
               {filteredQuestions.map((item) => (
-                <tr key={item.id}><td className="p-3 font-medium">{item.id}</td><td className="p-3">{item.skill}</td><td className="p-3">{item.type}</td><td className="p-3"><Badge tone={item.difficulty === 'Hard' ? 'rose' : 'amber'}>{item.difficulty}</Badge></td><td className="p-3">{formatDate(item.updatedAt)}</td></tr>
+                <tr key={item.id} className="border-t transition-colors duration-150" style={{ borderColor: 'var(--border-primary)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                  <td className="p-3 font-medium" style={{ color: 'var(--text-primary)' }}>{item.id}</td><td className="p-3">{item.skill}</td><td className="p-3">{item.type}</td>
+                  <td className="p-3"><Badge tone={item.difficulty === 'Hard' ? 'rose' : 'amber'}>{item.difficulty}</Badge></td>
+                  <td className="p-3">{formatDate(item.updatedAt)}</td>
+                </tr>
               ))}
             </tbody>
           </table>

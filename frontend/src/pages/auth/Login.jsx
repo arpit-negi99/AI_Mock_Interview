@@ -1,11 +1,15 @@
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { ROUTES } from '@/constants/routes';
 import { ROLES } from '@/constants/roles';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+
+const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } };
+const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.3 } } };
 
 export default function Login() {
   const { login } = useAuth();
@@ -21,17 +25,19 @@ export default function Login() {
 
   return (
     <Card className="w-full max-w-md" animate={false}>
-      <h1 className="text-2xl font-bold text-slate-950">Sign in</h1>
-      <p className="mt-2 text-sm text-slate-600">Use admin@example.com to preview the admin workspace in mock mode.</p>
-      <form className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
-        <Input label="Email" type="email" {...register('email', { required: 'Email is required' })} error={errors.email?.message} />
-        <Input label="Password" type="password" {...register('password', { required: 'Password is required', minLength: { value: 8, message: 'Use at least 8 characters' } })} error={errors.password?.message} />
-        <Button type="submit" className="w-full" isLoading={isSubmitting}>Login</Button>
-      </form>
-      <div className="mt-4 flex justify-between text-sm">
-        <Link to={ROUTES.FORGOT_PASSWORD} className="text-teal-700 hover:underline">Forgot password?</Link>
-        <Link to={ROUTES.REGISTER} className="text-teal-700 hover:underline">Create account</Link>
-      </div>
+      <motion.div variants={container} initial="hidden" animate="show">
+        <motion.h1 variants={item} className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Sign in</motion.h1>
+        <motion.p variants={item} className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>Use admin@example.com to preview the admin workspace in mock mode.</motion.p>
+        <motion.form variants={item} className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
+          <Input label="Email" type="email" {...register('email', { required: 'Email is required' })} error={errors.email?.message} />
+          <Input label="Password" type="password" {...register('password', { required: 'Password is required', minLength: { value: 8, message: 'Use at least 8 characters' } })} error={errors.password?.message} />
+          <Button type="submit" className="w-full" isLoading={isSubmitting}>Login</Button>
+        </motion.form>
+        <motion.div variants={item} className="mt-4 flex justify-between text-sm">
+          <Link to={ROUTES.FORGOT_PASSWORD} style={{ color: 'var(--accent-text)' }} className="hover:underline">Forgot password?</Link>
+          <Link to={ROUTES.REGISTER} style={{ color: 'var(--accent-text)' }} className="hover:underline">Create account</Link>
+        </motion.div>
+      </motion.div>
     </Card>
   );
 }

@@ -119,12 +119,12 @@ export default function InterviewSession() {
           <QuestionCard question={question} />
           <VoiceRecorder state={voiceState} supported={isSupported} onStart={startListening} onStop={stopListening} onRetry={resetTranscript} />
           <TranscriptBox transcript={transcript} onChange={setTranscript} />
-          {error && <p className="text-sm text-rose-600">{error}</p>}
+          {error && <p className="text-sm" style={{ color: 'var(--danger-text)' }}>{error}</p>}
           <Button icon={Send} isLoading={isSubmitting} onClick={submitAnswer}>Submit voice answer</Button>
         </div>
         <Card>
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-950">Session</h2>
+            <h2 className="font-semibold" style={{ color: 'var(--text-primary)' }}>Session</h2>
             <InterviewTimer minutes={location.state?.duration || 15} onComplete={() => toast.success('Time limit reached')} />
           </div>
           <div className="mt-5 space-y-4">
