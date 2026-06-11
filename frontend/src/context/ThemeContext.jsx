@@ -1,6 +1,5 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
-
-export const ThemeContext = createContext({ theme: 'light', isDark: false, toggleTheme: () => {} });
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ThemeContext } from './themeContext';
 
 function getInitialTheme() {
   const stored = localStorage.getItem('interviewai-theme');

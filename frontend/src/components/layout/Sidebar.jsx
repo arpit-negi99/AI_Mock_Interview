@@ -45,7 +45,7 @@ export function Sidebar() {
       <nav className="space-y-1" aria-label="Dashboard navigation">
         {links.map(({ label, to, icon: Icon }, index) => (
           <motion.div key={to} custom={index} variants={navItemVariants} initial="hidden" animate="show">
-            <NavLink to={to} className={({ isActive }) => cn('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200')}
+            <NavLink to={to} className={() => cn('flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200')}
               style={({ isActive }) => ({ color: isActive ? 'var(--accent-text)' : 'var(--text-secondary)', backgroundColor: isActive ? 'var(--accent-soft)' : 'transparent' })}>
               <Icon className="h-4 w-4" />
               {label}

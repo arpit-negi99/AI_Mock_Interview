@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, BarChart3, BrainCircuit, ClipboardCheck } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { ROUTES } from '@/constants/routes';
+import { ROLES } from '@/constants/roles';
 import { Card } from '@/components/ui/Card';
+import { useAuth } from '@/hooks/useAuth';
 
 const capabilities = [
   { title: 'Configure interviews', text: 'Pick role, seniority, skills, mode, duration, and response format.', icon: ClipboardCheck },
@@ -14,6 +16,14 @@ const container = { hidden: {}, show: { transition: { staggerChildren: 0.12 } } 
 const fadeUp = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } } };
 
 export default function Home() {
+  const { isAuthenticated, user } = useAuth();
+  const startPracticeRoute = isAuthenticated
+    ? user?.role === ROLES.ADMIN
+      ? ROUTES.ADMIN_DASHBOARD
+      : ROUTES.INTERVIEW_CONFIGURATION
+    : ROUTES.REGISTER;
+  const startPracticeLabel = isAuthenticated ? 'Start practice' : 'Start practicing';
+
   return (
     <section className="mx-auto max-w-7xl px-4 py-14 lg:px-8">
       <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr]">
@@ -22,7 +32,7 @@ export default function Home() {
           <motion.h1 variants={fadeUp} className="mt-4 text-4xl font-bold leading-tight sm:text-6xl" style={{ color: 'var(--text-primary)' }}>Prepare, interview, evaluate, and improve in one production-ready workspace.</motion.h1>
           <motion.p variants={fadeUp} className="mt-5 max-w-2xl text-lg" style={{ color: 'var(--text-secondary)' }}>A scalable frontend foundation for candidate practice, multimodal response submission, AI feedback, admin controls, and future backend integration.</motion.p>
           <motion.div variants={fadeUp} className="mt-8 flex flex-wrap gap-3">
-            <Link className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold transition-all duration-200 hover:shadow-lg" style={{ backgroundColor: 'var(--accent)', color: 'var(--text-inverse)' }} to={ROUTES.REGISTER}>Start practicing <ArrowRight className="h-4 w-4" /></Link>
+            <Link className="inline-flex items-center gap-2 rounded-lg px-5 py-3 text-sm font-semibold transition-all duration-200 hover:shadow-lg" style={{ backgroundColor: 'var(--accent)', color: 'var(--text-inverse)' }} to={startPracticeRoute}>{startPracticeLabel} <ArrowRight className="h-4 w-4" /></Link>
             <Link className="inline-flex items-center rounded-lg border px-5 py-3 text-sm font-semibold transition-all duration-200" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }} to={ROUTES.FEATURES}>View features</Link>
           </motion.div>
         </motion.div>
