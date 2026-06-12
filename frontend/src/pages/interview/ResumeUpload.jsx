@@ -31,9 +31,15 @@ export default function ResumeUpload() {
     <>
       <PageHeader title="Resume upload" description="Upload structure is ready for private storage URLs and future resume parsing." />
       <Card>
-        <label className="block text-sm font-medium text-slate-700">
+        <label className="block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
           Resume file
-          <input className="mt-2 block w-full rounded-md border border-slate-200 bg-white p-2 text-sm" type="file" accept=".pdf,.doc,.docx,.txt" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+          <input
+            className="mt-2 block w-full rounded-lg border p-2 text-sm"
+            style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+            type="file"
+            accept=".pdf,.doc,.docx,.txt"
+            onChange={(event) => setFile(event.target.files?.[0] || null)}
+          />
         </label>
         <Button className="mt-4" isLoading={isUploading} onClick={uploadResume}>Upload resume</Button>
       </Card>

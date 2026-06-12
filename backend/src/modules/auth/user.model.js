@@ -8,6 +8,9 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: Object.values(ROLES), default: ROLES.CANDIDATE },
   isVerified: { type: Boolean, default: false },
   isActive: { type: Boolean, default: true },
+  otpHash: { type: String, select: false },
+  otpPurpose: { type: String, enum: ['register', 'reset-password', null], default: null, select: false },
+  otpExpiresAt: { type: Date, select: false },
 }, { timestamps: true });
 
 export const User = mongoose.models.User || mongoose.model('User', userSchema);

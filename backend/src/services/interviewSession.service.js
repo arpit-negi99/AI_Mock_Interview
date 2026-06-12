@@ -2,33 +2,86 @@ import { cacheSession } from '../config/redis.js';
 import { INTERVIEW_STATUS } from '../constants/interviewStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { interviewRepository } from '../modules/interview/interview.repository.js';
-import { aiQuestionService } from './aiQuestion.service.js';
+import { syllabusRepository } from '../modules/syllabus/syllabus.repository.js';
+import { aiInterviewService } from './aiInterview.service.js';
 import { textToSpeechService } from './textToSpeech.service.js';
 
 function sessionId(session) {
   return session.id || session._id.toString();
 }
 
+function toObject(document) {
+  return document?.toObject?.() || document;
+}
+
+function normalizeQuestionType(type = 'main') {
+  const value = String(type).toLowerCase();
+  if (value.includes('follow')) return 'followup';
+  if (value.includes('clar')) return 'clarification';
+  if (value.includes('closing') || value.includes('system')) return 'closing';
+  return 'main';
+}
+
+function latestOpenQuestion(session) {
+  const history = session.questionHistory || [];
+  return [...history].reverse().find((item) => !item.answeredAt) || history[history.length - 1] || null;
+}
+
+function hasExpired(session) {
+  if (!session.startedAt || !session.duration) return false;
+  const started = new Date(session.startedAt).getTime();
+  return Date.now() - started > Number(session.duration) * 60 * 1000;
+}
+
+function wordCount(text = '') {
+  return text.split(/\s+/).filter(Boolean).length;
+}
+
 export const interviewSessionService = {
   async startSession(candidateId, payload) {
+    await syllabusRepository.seedSamples();
+    const selectedSyllabusIds = payload.selectedSyllabusIds || [];
+    const syllabusDocuments = selectedSyllabusIds.length
+      ? await syllabusRepository.findByIds(selectedSyllabusIds)
+      : await syllabusRepository.activeByType(payload.interviewType);
+
+    if (!syllabusDocuments.length) throw new AppError('No active syllabus found for this interview type', 404);
+
+    const selectedTopics = [...new Set(syllabusDocuments.flatMap((item) => item.topics || []))];
+    const selectedSubjects = [...new Set(syllabusDocuments.map((item) => item.subject).filter(Boolean))];
     const session = await interviewRepository.createSession({
       candidate: candidateId,
       interviewType: payload.interviewType,
-      selectedSubjects: payload.selectedSubjects || [],
-      selectedTopics: payload.selectedTopics || [],
+      selectedSubjects: payload.selectedSubjects?.length ? payload.selectedSubjects : selectedSubjects,
+      selectedTopics: payload.selectedTopics?.length ? payload.selectedTopics : selectedTopics,
+      syllabusIds: syllabusDocuments.map((item) => item.id || item._id),
       difficulty: payload.difficulty,
       totalQuestions: payload.totalQuestions || 5,
       duration: payload.duration || 15,
-      status: INTERVIEW_STATUS.ACTIVE,
+      status: INTERVIEW_STATUS.CREATED,
       startedAt: new Date(),
       currentQuestionIndex: 0,
       followUpCount: 0,
+      crossQuestionCount: 0,
+      maxCrossQuestions: payload.maxCrossQuestions || 2,
+      askedQuestions: [],
+      askedTopics: [],
+      questionHistory: [],
+      evaluationNotes: [],
     });
 
-    const next = await aiQuestionService.generateNextQuestion({ ...session, conversationHistory: [] });
-    const message = await this.recordAiQuestion(sessionId(session), next);
+    const firstQuestion = await aiInterviewService.generateFirstQuestion(toObject(session), syllabusDocuments);
+    const questionPatch = { ...this.buildQuestionPatch(toObject(session), firstQuestion, false), status: INTERVIEW_STATUS.ACTIVE };
+    const updatedSession = await interviewRepository.updateSession(sessionId(session), questionPatch);
+    const message = await this.recordAiQuestion(sessionId(session), firstQuestion);
     await cacheSession(sessionId(session), session);
-    return { session, question: message, tts: await textToSpeechService.synthesize({ text: next.questionText }) };
+    return {
+      session: updatedSession,
+      firstQuestion: firstQuestion.questionText,
+      question: message,
+      ttsText: firstQuestion.questionText,
+      tts: await textToSpeechService.synthesize({ text: firstQuestion.questionText }),
+    };
   },
 
   async ensureOwnSession(sessionIdValue, user) {
@@ -41,7 +94,8 @@ export const interviewSessionService = {
 
   async recordAiQuestion(sessionIdValue, aiResult) {
     const messages = await interviewRepository.listMessages(sessionIdValue);
-    const type = aiResult.questionType === 'FOLLOW_UP' ? 'follow_up' : aiResult.questionType === 'CLARIFICATION' ? 'clarification' : 'question';
+    const normalized = normalizeQuestionType(aiResult.questionType);
+    const type = normalized === 'followup' ? 'follow_up' : normalized === 'clarification' ? 'clarification' : normalized === 'closing' ? 'system' : 'question';
     return interviewRepository.addMessage({
       session: sessionIdValue,
       sender: 'ai',
@@ -51,9 +105,57 @@ export const interviewSessionService = {
     });
   },
 
+  buildQuestionPatch(session, aiResult, incrementMain = true) {
+    const questionType = normalizeQuestionType(aiResult.questionType);
+    const isMain = questionType === 'main';
+    const questionEntry = {
+      questionText: aiResult.questionText,
+      questionType,
+      topic: aiResult.topic || session.currentTopic,
+      subject: aiResult.subject,
+      expectedConcepts: aiResult.expectedConcepts || [],
+      askedAt: new Date(),
+    };
+    return {
+      askedQuestions: [...(session.askedQuestions || []), aiResult.questionText],
+      askedTopics: aiResult.topic ? [...new Set([...(session.askedTopics || []), aiResult.topic])] : (session.askedTopics || []),
+      currentTopic: aiResult.topic || session.currentTopic,
+      questionHistory: [...(session.questionHistory || []), questionEntry],
+      currentQuestionIndex: isMain && incrementMain ? Number(session.currentQuestionIndex || 0) + 1 : Number(session.currentQuestionIndex || 0),
+      followUpCount: isMain ? 0 : Number(session.followUpCount || 0) + 1,
+      crossQuestionCount: isMain ? 0 : Number(session.crossQuestionCount || 0) + 1,
+    };
+  },
+
+  buildAnswerPatch(session, currentQuestion, transcript, evaluation) {
+    const history = [...(session.questionHistory || [])];
+    const targetIndex = currentQuestion ? history.findIndex((item) => item.questionText === currentQuestion.questionText && !item.answeredAt) : -1;
+    const index = targetIndex >= 0 ? targetIndex : history.length - 1;
+    if (index >= 0) {
+      history[index] = { ...history[index], answerTranscript: transcript, answeredAt: new Date() };
+    }
+    if (!evaluation) return { questionHistory: history, evaluationNotes: session.evaluationNotes || [] };
+    const note = {
+      questionText: currentQuestion?.questionText,
+      topic: currentQuestion?.topic,
+      score: Number(evaluation.score || 0),
+      strengths: evaluation.strengths || [],
+      gaps: evaluation.gaps || [],
+      brief: evaluation.brief || 'Answer processed.',
+      createdAt: new Date(),
+    };
+    return { questionHistory: history, evaluationNotes: [...(session.evaluationNotes || []), note] };
+  },
+
   async processCandidateAnswer({ sessionId: sessionIdValue, user, transcript, audioUrl }) {
-    const session = await this.ensureOwnSession(sessionIdValue, user);
+    let session = await this.ensureOwnSession(sessionIdValue, user);
     if (session.status !== INTERVIEW_STATUS.ACTIVE) throw new AppError('Interview session is not active', 409);
+    if (wordCount(transcript || '') < 5) throw new AppError('Please elaborate before submitting your answer.', 400);
+    if (hasExpired(session)) {
+      await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.EXPIRED, endedAt: new Date() });
+      throw new AppError('Interview session has expired', 409);
+    }
+
     const messages = await interviewRepository.listMessages(sessionIdValue);
 
     await interviewRepository.addMessage({
@@ -66,24 +168,56 @@ export const interviewSessionService = {
       sequenceNumber: messages.length + 1,
     });
 
-    const sessionContext = session.toObject?.() || session;
-    const aiResult = await aiQuestionService.generateNextQuestion({
-      ...sessionContext,
-      candidateAnswerTranscript: transcript,
-      conversationHistory: await interviewRepository.listMessages(sessionIdValue),
-    });
+    session = toObject(session);
+    const syllabusDocuments = await syllabusRepository.findByIds((session.syllabusIds || []).map(String));
+    const currentQuestion = latestOpenQuestion(session);
+    const answerPatch = this.buildAnswerPatch(session, currentQuestion, transcript, null);
+    session = { ...session, ...answerPatch };
+    const aiResult = await aiInterviewService.processAnswerWithRepetitionGuard(session, syllabusDocuments, currentQuestion, transcript);
+    const evaluationPatch = this.buildAnswerPatch(toObject(await interviewRepository.findSessionById(sessionIdValue)), currentQuestion, transcript, aiResult.answerEvaluation);
 
-    if (aiResult.nextAction === 'END_INTERVIEW') {
-      await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.ENDED, endedAt: new Date() });
-      const closing = await this.recordAiQuestion(sessionIdValue, aiResult);
-      return { ended: true, question: closing, aiResult, tts: await textToSpeechService.synthesize({ text: aiResult.questionText }) };
+    if (aiResult.decision === 'END_INTERVIEW') {
+      const evaluating = await interviewRepository.updateSession(sessionIdValue, { ...evaluationPatch, status: INTERVIEW_STATUS.EVALUATING, endedAt: new Date() });
+      const finalEvaluation = await aiInterviewService.generateFinalEvaluation(toObject(evaluating));
+      const completed = await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.COMPLETED, finalEvaluation });
+      return {
+        ended: true,
+        session: completed,
+        question: null,
+        aiResult,
+        finalEvaluation,
+        ttsText: 'Thank you. This interview is complete and your evaluation is ready.',
+      };
     }
 
-    const isFollowUp = ['ASK_FOLLOW_UP', 'ASK_CLARIFICATION'].includes(aiResult.nextAction);
-    const currentQuestionIndex = isFollowUp ? session.currentQuestionIndex : Number(session.currentQuestionIndex || 0) + 1;
-    const followUpCount = isFollowUp ? Number(session.followUpCount || 0) + 1 : 0;
-    await interviewRepository.updateSession(sessionIdValue, { currentQuestionIndex, followUpCount });
+    const questionPatch = this.buildQuestionPatch({ ...session, ...evaluationPatch }, aiResult);
+    const updatedSession = await interviewRepository.updateSession(sessionIdValue, { ...evaluationPatch, ...questionPatch });
     const question = await this.recordAiQuestion(sessionIdValue, aiResult);
-    return { ended: false, question, aiResult, tts: await textToSpeechService.synthesize({ text: aiResult.questionText }) };
+    return {
+      ended: false,
+      session: updatedSession,
+      question,
+      aiResult,
+      nextQuestion: aiResult.questionText,
+      questionType: normalizeQuestionType(aiResult.questionType),
+      topic: aiResult.topic,
+      ttsText: aiResult.questionText,
+      tts: await textToSpeechService.synthesize({ text: aiResult.questionText }),
+    };
+  },
+
+  async endSession(sessionIdValue, user) {
+    const session = await this.ensureOwnSession(sessionIdValue, user);
+    if (![INTERVIEW_STATUS.ACTIVE, INTERVIEW_STATUS.EXPIRED].includes(session.status)) {
+      throw new AppError('Interview session cannot be ended from its current state', 409);
+    }
+    const evaluating = await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.EVALUATING, endedAt: new Date() });
+    const finalEvaluation = await aiInterviewService.generateFinalEvaluation(toObject(evaluating));
+    return interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.COMPLETED, finalEvaluation });
+  },
+
+  async getReport(sessionIdValue, user) {
+    const session = await this.ensureOwnSession(sessionIdValue, user);
+    return { session, messages: await interviewRepository.listMessages(sessionIdValue) };
   },
 };

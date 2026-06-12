@@ -2,12 +2,15 @@ export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/auth/login',
     REGISTER: '/auth/register',
+    VERIFY_REGISTRATION: '/auth/verify-registration',
     LOGOUT: '/auth/logout',
     ME: '/auth/me',
     FORGOT_PASSWORD: '/auth/forgot-password',
+    RESET_PASSWORD: '/auth/reset-password',
   },
   USERS: {
     PROFILE: '/users/profile',
+    ACCOUNT: '/users/account',
     PROGRESS: '/users/progress',
   },
   INTERVIEWS: {

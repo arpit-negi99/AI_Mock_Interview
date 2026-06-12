@@ -9,6 +9,8 @@ export const startInterviewSchema = z.object({
     difficulty: z.enum(DIFFICULTIES),
     totalQuestions: z.number().int().min(1).max(30).default(5),
     duration: z.number().int().min(1).max(180).default(15),
+    selectedSyllabusIds: z.array(z.string().min(3)).optional().default([]),
+    maxCrossQuestions: z.number().int().min(0).max(5).optional().default(2),
   }),
   params: z.object({}).optional(),
   query: z.object({}).optional(),
@@ -19,3 +21,5 @@ export const sessionIdSchema = z.object({
   body: z.object({}).optional(),
   query: z.object({}).optional(),
 });
+
+export const reportSessionSchema = sessionIdSchema;

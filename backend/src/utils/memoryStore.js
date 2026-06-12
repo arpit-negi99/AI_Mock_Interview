@@ -2,6 +2,7 @@ export const memoryStore = {
   users: [],
   sessions: [],
   messages: [],
+  syllabus: [],
   questions: [
     {
       id: 'q-os-1',

@@ -5,7 +5,9 @@ import { apiClient } from './apiClient';
 export const authService = {
   login: (payload) => apiClient.post(API_ENDPOINTS.AUTH.LOGIN, payload),
   register: (payload) => apiClient.post(API_ENDPOINTS.AUTH.REGISTER, payload),
+  verifyRegistration: (payload) => apiClient.post(API_ENDPOINTS.AUTH.VERIFY_REGISTRATION, payload),
   forgotPassword: (payload) => apiClient.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, payload),
+  resetPassword: (payload) => apiClient.post(API_ENDPOINTS.AUTH.RESET_PASSWORD, payload),
   logout: () => apiClient.post(API_ENDPOINTS.AUTH.LOGOUT),
   me: () => apiClient.get(API_ENDPOINTS.AUTH.ME),
 };

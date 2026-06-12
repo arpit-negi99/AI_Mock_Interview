@@ -1,9 +1,8 @@
-import { INTERVIEW_STATUS } from '../../constants/interviewStatus.js';
 import { successResponse } from '../../utils/apiResponse.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, paginatedMeta } from '../../utils/pagination.js';
-import { interviewRepository } from './interview.repository.js';
 import { interviewSessionService } from '../../services/interviewSession.service.js';
+import { interviewRepository } from './interview.repository.js';
 
 export const interviewController = {
   start: asyncHandler(async (req, res) => {
@@ -21,8 +20,11 @@ export const interviewController = {
     return successResponse(res, { data: { session, messages } });
   }),
   end: asyncHandler(async (req, res) => {
-    await interviewSessionService.ensureOwnSession(req.params.sessionId, req.user);
-    const session = await interviewRepository.updateSession(req.params.sessionId, { status: INTERVIEW_STATUS.ENDED, endedAt: new Date() });
+    const session = await interviewSessionService.endSession(req.params.sessionId, req.user);
     return successResponse(res, { message: 'Interview ended', data: { session } });
+  }),
+  report: asyncHandler(async (req, res) => {
+    const report = await interviewSessionService.getReport(req.params.sessionId, req.user);
+    return successResponse(res, { data: report });
   }),
 };

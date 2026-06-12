@@ -40,14 +40,22 @@ export function AuthProvider({ children }) {
   }, [persistSession]);
 
   const register = useCallback(async (payload) => {
-    const session = APP_CONFIG.enableMocks ? createMockSession(payload.email) : unwrapAuthSession(await authService.register(payload));
+    const response = APP_CONFIG.enableMocks ? { data: { expiresInMinutes: 10 } } : await authService.register(payload);
+    toast.success('Verification OTP sent to email');
+    return response;
+  }, []);
+
+  const verifyRegistration = useCallback(async (payload) => {
+    const session = APP_CONFIG.enableMocks
+      ? createMockSession(payload.email)
+      : unwrapAuthSession(await authService.verifyRegistration(payload));
     persistSession(session);
-    toast.success('Account created');
+    toast.success('Account verified');
     return session.user;
   }, [persistSession]);
 
-  const logout = useCallback(async () => {
-    if (!APP_CONFIG.enableMocks) {
+  const logout = useCallback(async ({ skipApi = false } = {}) => {
+    if (!APP_CONFIG.enableMocks && !skipApi) {
       await authService.logout().catch(() => null);
     }
     localStorage.removeItem(APP_CONFIG.storageKeys.token);
@@ -63,8 +71,9 @@ export function AuthProvider({ children }) {
     isBootstrapping: false,
     login,
     register,
+    verifyRegistration,
     logout,
-  }), [login, logout, register, token, user]);
+  }), [login, logout, register, token, user, verifyRegistration]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

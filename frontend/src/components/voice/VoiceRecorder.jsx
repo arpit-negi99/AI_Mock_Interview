@@ -4,11 +4,11 @@ import { ListeningAnimation } from './ListeningAnimation';
 
 export function VoiceRecorder({ state, onStart, onStop, onRetry, supported }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+    <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-tertiary)' }}>
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="font-semibold text-slate-950">Voice answer</p>
-          <p className="text-sm text-slate-500">{supported ? 'Push to talk, review transcript, then submit.' : 'SpeechRecognition unavailable. Use debug transcript input.'}</p>
+          <p className="font-semibold" style={{ color: 'var(--text-primary)' }}>Voice answer</p>
+          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>{supported ? 'Push to talk, review transcript, then submit.' : 'SpeechRecognition unavailable. Use debug transcript input.'}</p>
         </div>
         {state === 'listening' && <ListeningAnimation />}
       </div>
