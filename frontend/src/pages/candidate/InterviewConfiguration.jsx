@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { TopicSelector } from '@/components/voice/TopicSelector';
 import { DifficultySelector } from '@/components/voice/DifficultySelector';
 
 const typeOptions = [
@@ -22,17 +21,17 @@ const typeOptions = [
 export default function InterviewConfiguration() {
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: { interviewType: 'core_cse', topic: 'Operating Systems', difficulty: 'medium', totalQuestions: 5, duration: 15 },
+    defaultValues: { interviewType: 'core_cse', difficulty: 'medium', duration: 15 },
   });
 
   async function onSubmit(values) {
     try {
       const response = await voiceInterviewService.start({
         interviewType: values.interviewType,
-        selectedSubjects: [values.topic],
-        selectedTopics: [values.topic],
+        selectedSubjects: [],
+        selectedTopics: [],
         difficulty: values.difficulty,
-        totalQuestions: Number(values.totalQuestions),
+        totalQuestions: 5,
         duration: Number(values.duration),
       });
       const data = response.data || response;
@@ -45,13 +44,11 @@ export default function InterviewConfiguration() {
 
   return (
     <>
-      <PageHeader title="Voice interview setup" description="Choose a category, topic, difficulty, and limit. The backend starts the session and returns the first AI question." />
+      <PageHeader title="Voice interview setup" description="Choose the interview format and session length. The AI will select relevant questions from the active syllabus." />
       <Card>
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
+        <form className="grid gap-5 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
           <Select label="Interview category" {...register('interviewType', { required: true })} options={typeOptions} />
-          <TopicSelector {...register('topic', { required: true })} error={errors.topic?.message} />
           <DifficultySelector {...register('difficulty')} />
-          <Input label="Number of questions" type="number" min="1" max="30" {...register('totalQuestions', { required: 'Question limit is required' })} error={errors.totalQuestions?.message} />
           <Input label="Duration in minutes" type="number" min="1" max="180" {...register('duration', { required: 'Duration is required' })} error={errors.duration?.message} />
           <div className="md:col-span-2"><Button type="submit" isLoading={isSubmitting}>Start Voice Interview</Button></div>
         </form>

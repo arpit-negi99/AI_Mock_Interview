@@ -6,6 +6,7 @@ import voiceRoutes from '../modules/voiceSession/voice.routes.js';
 import resumeRoutes from '../modules/resume/resume.routes.js';
 import questionRoutes from '../modules/questionBank/question.routes.js';
 import auditRoutes from '../modules/audit/audit.routes.js';
+import syllabusRoutes from '../modules/syllabus/syllabus.routes.js';
 import { successResponse } from '../utils/apiResponse.js';
 
 const router = Router();
@@ -17,6 +18,7 @@ router.use('/interviews', interviewRoutes);
 router.use('/voice', voiceRoutes);
 router.use('/resume', resumeRoutes);
 router.use('/questions', questionRoutes);
+router.use('/syllabus', syllabusRoutes);
 router.use('/audit', auditRoutes);
 
 export default router;

@@ -7,7 +7,22 @@ import { InterviewSession } from './interviewSession.model.js';
 export const interviewRepository = {
   async createSession(data) {
     if (isDbConnected()) return InterviewSession.create(data);
-    const session = { ...data, id: createId('session'), status: INTERVIEW_STATUS.ACTIVE, conversationHistory: [], currentQuestionIndex: 0, followUpCount: 0, startedAt: new Date(), createdAt: new Date() };
+    const session = {
+      ...data,
+      id: createId('session'),
+      status: data.status || INTERVIEW_STATUS.ACTIVE,
+      conversationHistory: [],
+      askedQuestions: data.askedQuestions || [],
+      askedTopics: data.askedTopics || [],
+      questionHistory: data.questionHistory || [],
+      evaluationNotes: data.evaluationNotes || [],
+      currentQuestionIndex: data.currentQuestionIndex || 0,
+      followUpCount: data.followUpCount || 0,
+      crossQuestionCount: data.crossQuestionCount || 0,
+      maxCrossQuestions: data.maxCrossQuestions || 2,
+      startedAt: data.startedAt || new Date(),
+      createdAt: new Date(),
+    };
     memoryStore.sessions.push(session);
     return session;
   },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Send } from 'lucide-react';
@@ -26,7 +26,11 @@ export default function InterviewSession() {
   const [question, setQuestion] = useState(location.state?.firstQuestion || '');
   const [muted, setMuted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { transcript, setTranscript, voiceState, setVoiceState, error, startListening, stopListening, resetTranscript, isSupported } = useSpeechRecognition();
+  const autoSubmitRef = useRef(null);
+  const { transcript, setTranscript, voiceState, setVoiceState, error, startListening, stopListening, resetTranscript, isSupported } = useSpeechRecognition({
+    silenceMs: 4500,
+    onSilence: (finalTranscript) => autoSubmitRef.current?.(finalTranscript),
+  });
 
   const socket = useMemo(() => getSocket(token), [token]);
 
@@ -85,15 +89,16 @@ export default function InterviewSession() {
     };
   }, [navigate, resetTranscript, sessionId, socket, speak, setVoiceState]);
 
-  async function submitAnswer() {
-    if (!transcript.trim()) {
+  const submitAnswer = useCallback(async (answerText = transcript) => {
+    const finalTranscript = answerText.trim();
+    if (!finalTranscript) {
       toast.error('Record or type an answer transcript first');
       return;
     }
     setIsSubmitting(true);
     setVoiceState('processing');
     try {
-      const response = await voiceInterviewService.answerText(sessionId, transcript);
+      const response = await voiceInterviewService.answerText(sessionId, finalTranscript);
       const data = response.data || response;
       const text = data.question?.text || data.aiResult?.questionText;
       setQuestion(text);
@@ -105,7 +110,11 @@ export default function InterviewSession() {
     } finally {
       setIsSubmitting(false);
     }
-  }
+  }, [resetTranscript, sessionId, setVoiceState, speak, transcript]);
+
+  useEffect(() => {
+    autoSubmitRef.current = submitAnswer;
+  }, [submitAnswer]);
 
   return (
     <>
@@ -120,7 +129,7 @@ export default function InterviewSession() {
           <VoiceRecorder state={voiceState} supported={isSupported} onStart={startListening} onStop={stopListening} onRetry={resetTranscript} />
           <TranscriptBox transcript={transcript} onChange={setTranscript} />
           {error && <p className="text-sm" style={{ color: 'var(--danger-text)' }}>{error}</p>}
-          <Button icon={Send} isLoading={isSubmitting} onClick={submitAnswer}>Submit voice answer</Button>
+          <Button icon={Send} isLoading={isSubmitting} onClick={() => submitAnswer()}>Submit voice answer</Button>
         </div>
         <Card>
           <div className="flex items-center justify-between">

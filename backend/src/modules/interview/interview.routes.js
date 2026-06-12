@@ -3,7 +3,7 @@ import { protect } from '../../middlewares/authMiddleware.js';
 import { aiRateLimiter } from '../../middlewares/rateLimitMiddleware.js';
 import { validate } from '../../middlewares/validateMiddleware.js';
 import { interviewController } from './interview.controller.js';
-import { sessionIdSchema, startInterviewSchema } from './interview.validation.js';
+import { reportSessionSchema, sessionIdSchema, startInterviewSchema } from './interview.validation.js';
 
 const router = Router();
 
@@ -12,5 +12,6 @@ router.post('/start', aiRateLimiter, validate(startInterviewSchema), interviewCo
 router.get('/', interviewController.list);
 router.get('/:sessionId', validate(sessionIdSchema), interviewController.getById);
 router.post('/:sessionId/end', validate(sessionIdSchema), interviewController.end);
+router.get('/:sessionId/report', validate(reportSessionSchema), interviewController.report);
 
 export default router;

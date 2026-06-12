@@ -1,3 +1,4 @@
+import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -15,12 +16,20 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({ defaultValues: { email: 'candidate@example.com', password: 'password123' } });
+  const { register, handleSubmit, setError, clearErrors, formState: { errors, isSubmitting } } = useForm({ defaultValues: { email: 'candidate@example.com', password: 'password123' } });
+  const serverError = errors.root?.server?.message;
 
   async function onSubmit(values) {
-    const user = await login(values);
-    const fallback = user.role === ROLES.ADMIN ? ROUTES.ADMIN_DASHBOARD : ROUTES.CANDIDATE_DASHBOARD;
-    navigate(location.state?.from?.pathname || fallback, { replace: true });
+    clearErrors('root.server');
+    try {
+      const user = await login(values);
+      const fallback = user.role === ROLES.ADMIN ? ROUTES.ADMIN_DASHBOARD : ROUTES.CANDIDATE_DASHBOARD;
+      navigate(location.state?.from?.pathname || fallback, { replace: true });
+    } catch (error) {
+      const message = error?.message || 'Unable to sign in. Please try again.';
+      setError('root.server', { type: 'server', message });
+      toast.error(message);
+    }
   }
 
   return (
@@ -29,6 +38,11 @@ export default function Login() {
         <motion.h1 variants={item} className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Sign in</motion.h1>
         <motion.p variants={item} className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>Use admin@example.com to preview the admin workspace in mock mode.</motion.p>
         <motion.form variants={item} className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
+          {serverError && (
+            <div role="alert" className="rounded-lg border px-3 py-2 text-sm" style={{ borderColor: 'var(--danger)', backgroundColor: 'var(--danger-soft)', color: 'var(--danger-text)' }}>
+              {serverError}
+            </div>
+          )}
           <Input label="Email" type="email" {...register('email', { required: 'Email is required' })} error={errors.email?.message} />
           <Input label="Password" type="password" {...register('password', { required: 'Password is required', minLength: { value: 8, message: 'Use at least 8 characters' } })} error={errors.password?.message} />
           <Button type="submit" className="w-full" isLoading={isSubmitting}>Login</Button>

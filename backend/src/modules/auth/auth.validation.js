@@ -20,3 +20,30 @@ export const loginSchema = z.object({
   params: z.object({}).optional(),
   query: z.object({}).optional(),
 });
+
+export const verifyRegistrationSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+    otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6 digit code'),
+  }),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+  }),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    email: z.string().email(),
+    otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6 digit code'),
+    password: z.string().min(8),
+  }),
+  params: z.object({}).optional(),
+  query: z.object({}).optional(),
+});

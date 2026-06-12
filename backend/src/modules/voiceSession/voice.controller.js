@@ -8,7 +8,7 @@ import { interviewSessionService } from '../../services/interviewSession.service
 
 export const voiceController = {
   answer: asyncHandler(async (req, res) => {
-    emitToSession(req.params.sessionId, 'interview:processing', { state: 'processing' });
+    emitToSession(req.params.sessionId, 'interview:thinking', { state: 'processing' });
     const transcript = req.body.transcript || req.body.fallbackText || (await speechToTextService.transcribe({ file: req.file })).transcript;
     const result = await interviewSessionService.processCandidateAnswer({
       sessionId: req.params.sessionId,
@@ -16,8 +16,16 @@ export const voiceController = {
       transcript,
       audioUrl: toPublicFileUrl(req.file),
     });
-    const event = result.ended ? 'interview:ended' : result.aiResult.questionType === 'FOLLOW_UP' ? 'ai:follow-up' : result.aiResult.questionType === 'CLARIFICATION' ? 'ai:clarification' : 'ai:question';
+    const normalizedType = result.questionType || result.aiResult?.questionType;
+    const event = result.ended
+      ? 'interview:ended'
+      : normalizedType === 'followup'
+        ? 'interview:followup'
+        : normalizedType === 'clarification'
+          ? 'interview:clarification'
+          : 'interview:question';
     emitToSession(req.params.sessionId, event, result);
+    if (result.ended && result.finalEvaluation) emitToSession(req.params.sessionId, 'interview:evaluation-ready', { sessionId: req.params.sessionId, finalEvaluation: result.finalEvaluation });
     return successResponse(res, { message: 'Answer processed', data: result });
   }),
   nextQuestion: asyncHandler(async (req, res) => {
