@@ -1,7 +1,9 @@
 import { successResponse } from '../../utils/apiResponse.js';
+import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { getPagination, paginatedMeta } from '../../utils/pagination.js';
 import { interviewSessionService } from '../../services/interviewSession.service.js';
+import { interviewReportService } from '../../services/interviewReport.service.js';
 import { interviewRepository } from './interview.repository.js';
 
 export const interviewController = {
@@ -26,5 +28,19 @@ export const interviewController = {
   report: asyncHandler(async (req, res) => {
     const report = await interviewSessionService.getReport(req.params.sessionId, req.user);
     return successResponse(res, { data: report });
+  }),
+  exportReport: asyncHandler(async (req, res) => {
+    const data = await interviewSessionService.getReport(req.params.sessionId, req.user);
+    if (!data.interviewReport) throw new AppError('Interview report is not available until the interview is completed', 409);
+    const format = String(req.query.format || 'json').toLowerCase();
+    const exported = interviewReportService.exportReport(data.interviewReport, ['json', 'csv', 'pdf'].includes(format) ? format : 'json');
+    res.setHeader('Content-Type', exported.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${exported.filename}"`);
+    return res.send(exported.body);
+  }),
+  analytics: asyncHandler(async (req, res) => {
+    const reports = await interviewReportService.listByCandidate(req.user.id);
+    const analytics = interviewReportService.analyticsFromReports(reports, String(req.query.range || 'all'));
+    return successResponse(res, { data: analytics });
   }),
 };

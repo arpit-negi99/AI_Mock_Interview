@@ -2,8 +2,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const isTestRun = process.env.NODE_ENV === 'test' || process.env.npm_lifecycle_event === 'test';
+const nodeEnv = isTestRun ? 'test' : process.env.NODE_ENV || 'development';
+
 export const env = {
-  nodeEnv: process.env.NODE_ENV || 'development',
+  nodeEnv,
   port: Number(process.env.PORT || 5000),
   apiPrefix: process.env.API_PREFIX || '/api/v1',
   clientOrigin: process.env.CLIENT_ORIGIN || 'http://localhost:5173',
@@ -20,13 +23,13 @@ export const env = {
   rateLimitMax: Number(process.env.RATE_LIMIT_MAX || 250),
   authRateLimitMax: Number(process.env.AUTH_RATE_LIMIT_MAX || 20),
   aiRateLimitMax: Number(process.env.AI_RATE_LIMIT_MAX || 60),
-  mockAi: process.env.MOCK_AI !== 'false',
+  mockAi: isTestRun || process.env.MOCK_AI !== 'false',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
   interviewerModel: process.env.INTERVIEWER_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini',
   interviewerPersona: process.env.INTERVIEWER_PERSONA || 'professional',
-  mockStt: process.env.MOCK_STT !== 'false',
-  mockTts: process.env.MOCK_TTS !== 'false',
+  mockStt: isTestRun || process.env.MOCK_STT !== 'false',
+  mockTts: isTestRun || process.env.MOCK_TTS !== 'false',
   sttProvider: process.env.STT_PROVIDER || 'openai',
   openaiWhisperModel: process.env.OPENAI_WHISPER_MODEL || 'whisper-1',
   deepgramApiKey: process.env.DEEPGRAM_API_KEY || '',
@@ -43,5 +46,5 @@ export const env = {
     pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.EMAIL_PASS || process.env.EMAIL_PASSWORD || process.env.MAIL_PASS || process.env.MAIL_PASSWORD || process.env.GMAIL_APP_PASSWORD || '',
     from: process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.SMTP_MAIL || process.env.EMAIL_USER || process.env.EMAIL_USERNAME || process.env.MAIL_USER || process.env.MAIL_USERNAME || process.env.GMAIL_USER || '',
   },
-  isProduction: process.env.NODE_ENV === 'production',
+  isProduction: nodeEnv === 'production',
 };

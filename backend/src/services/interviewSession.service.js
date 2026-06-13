@@ -5,6 +5,8 @@ import { interviewRepository } from '../modules/interview/interview.repository.j
 import { resumeRepository } from '../modules/resume/resume.repository.js';
 import { syllabusRepository } from '../modules/syllabus/syllabus.repository.js';
 import { aiInterviewService } from './aiInterview.service.js';
+import { InterviewContextManager } from './InterviewContextManager.js';
+import { interviewReportService } from './interviewReport.service.js';
 import { textToSpeechService } from './textToSpeech.service.js';
 
 function sessionId(session) {
@@ -83,6 +85,19 @@ export const interviewSessionService = {
       askedQuestions: [],
       askedTopics: [],
       resumeContext: compactResumeContext(latestResume),
+      interviewMemory: { exchanges: [], summary: {} },
+      skillGraph: { nodes: [], edges: [] },
+      conversationGraph: { nodes: [], edges: [] },
+      topicDepth: [],
+      interviewState: {
+        answerQuality: 'unknown',
+        nextDifficulty: payload.difficulty,
+        confidence: 0,
+        averageTopicDepth: 0,
+        needsClarification: false,
+        shouldIncreaseDifficulty: false,
+        memoryExchangeCount: 0,
+      },
       questionHistory: [],
       evaluationNotes: [],
     });
@@ -111,15 +126,30 @@ export const interviewSessionService = {
 
   async recordAiQuestion(sessionIdValue, aiResult) {
     const messages = await interviewRepository.listMessages(sessionIdValue);
+    const session = await interviewRepository.findSessionById(sessionIdValue);
     const normalized = normalizeQuestionType(aiResult.questionType);
     const type = normalized === 'followup' ? 'follow_up' : normalized === 'clarification' ? 'clarification' : normalized === 'closing' ? 'system' : 'question';
-    return interviewRepository.addMessage({
+    const message = await interviewRepository.addMessage({
       session: sessionIdValue,
       sender: 'ai',
       type,
       text: aiResult.questionText,
       sequenceNumber: messages.length + 1,
     });
+    if (aiResult.questionText) {
+      await interviewRepository.addQuestionRecord({
+        candidate: session?.candidate,
+        session: sessionIdValue,
+        questionText: aiResult.questionText,
+        questionType: normalized,
+        topic: aiResult.topic,
+        subject: aiResult.subject,
+        expectedConcepts: aiResult.expectedConcepts || [],
+        sequenceNumber: messages.length + 1,
+        askedAt: new Date(),
+      });
+    }
+    return message;
   },
 
   buildQuestionPatch(session, aiResult, incrementMain = true) {
@@ -144,12 +174,17 @@ export const interviewSessionService = {
     };
   },
 
-  buildAnswerPatch(session, currentQuestion, transcript, evaluation) {
+  buildAnswerPatch(session, currentQuestion, transcript, evaluation, extractedContext = null) {
     const history = [...(session.questionHistory || [])];
     const targetIndex = currentQuestion ? history.findIndex((item) => item.questionText === currentQuestion.questionText && !item.answeredAt) : -1;
     const index = targetIndex >= 0 ? targetIndex : history.length - 1;
     if (index >= 0) {
-      history[index] = { ...history[index], answerTranscript: transcript, answeredAt: new Date() };
+      history[index] = {
+        ...history[index],
+        answerTranscript: transcript,
+        extractedContext: extractedContext || history[index].extractedContext,
+        answeredAt: new Date(),
+      };
     }
     if (!evaluation) return { questionHistory: history, evaluationNotes: session.evaluationNotes || [] };
     const note = {
@@ -188,19 +223,57 @@ export const interviewSessionService = {
     session = toObject(session);
     const syllabusDocuments = await syllabusRepository.findByIds((session.syllabusIds || []).map(String));
     const currentQuestion = latestOpenQuestion(session);
-    const answerPatch = this.buildAnswerPatch(session, currentQuestion, transcript, null);
+    const contextUpdate = await InterviewContextManager.updateAfterAnswer({ session, currentQuestion, answerTranscript: transcript });
+    const contextPatch = {
+      interviewMemory: contextUpdate.memory,
+      skillGraph: contextUpdate.skillGraph,
+      conversationGraph: contextUpdate.conversationGraph,
+      topicDepth: contextUpdate.topicDepth,
+      interviewState: contextUpdate.interviewState,
+    };
+    const answerPatch = this.buildAnswerPatch(session, currentQuestion, transcript, null, contextUpdate.extraction);
     session = { ...session, ...answerPatch };
-    const aiResult = await aiInterviewService.processAnswerWithRepetitionGuard(session, syllabusDocuments, currentQuestion, transcript);
-    const evaluationPatch = this.buildAnswerPatch(toObject(await interviewRepository.findSessionById(sessionIdValue)), currentQuestion, transcript, aiResult.answerEvaluation);
+    const aiResult = await aiInterviewService.processAnswerWithRepetitionGuard(
+      { ...session, ...contextPatch },
+      syllabusDocuments,
+      currentQuestion,
+      transcript,
+      contextUpdate,
+    );
+    const evaluationPatch = this.buildAnswerPatch(
+      toObject(await interviewRepository.findSessionById(sessionIdValue)),
+      currentQuestion,
+      transcript,
+      aiResult.answerEvaluation,
+      contextUpdate.extraction,
+    );
+    await interviewRepository.addAnswerRecord({
+      candidate: session.candidate,
+      session: sessionIdValue,
+      questionText: currentQuestion?.questionText,
+      topic: currentQuestion?.topic,
+      answerTranscript: transcript,
+      extractedContext: contextUpdate.extraction,
+      score: aiResult.answerEvaluation?.score,
+      sequenceNumber: messages.length + 1,
+      answeredAt: new Date(),
+    });
 
     if (aiResult.decision === 'END_INTERVIEW') {
-      const evaluating = await interviewRepository.updateSession(sessionIdValue, { ...evaluationPatch, status: INTERVIEW_STATUS.EVALUATING, endedAt: new Date() });
+      const evaluating = await interviewRepository.updateSession(sessionIdValue, {
+        ...evaluationPatch,
+        ...contextPatch,
+        status: INTERVIEW_STATUS.EVALUATING,
+        endedAt: new Date(),
+      });
       const finalEvaluation = await aiInterviewService.generateFinalEvaluation(toObject(evaluating));
       const closingText = 'Thank you. This interview is complete and your evaluation is ready.';
       const completed = await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.COMPLETED, finalEvaluation });
+      const interviewReport = await interviewReportService.generateForSession(toObject(completed));
       return {
         ended: true,
         session: completed,
+        interviewReport,
         question: null,
         aiResult,
         finalEvaluation,
@@ -210,7 +283,7 @@ export const interviewSessionService = {
     }
 
     const questionPatch = this.buildQuestionPatch({ ...session, ...evaluationPatch }, aiResult);
-    const updatedSession = await interviewRepository.updateSession(sessionIdValue, { ...evaluationPatch, ...questionPatch });
+    const updatedSession = await interviewRepository.updateSession(sessionIdValue, { ...evaluationPatch, ...contextPatch, ...questionPatch });
     const question = await this.recordAiQuestion(sessionIdValue, aiResult);
     return {
       ended: false,
@@ -232,11 +305,17 @@ export const interviewSessionService = {
     }
     const evaluating = await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.EVALUATING, endedAt: new Date() });
     const finalEvaluation = await aiInterviewService.generateFinalEvaluation(toObject(evaluating));
-    return interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.COMPLETED, finalEvaluation });
+    const completed = await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.COMPLETED, finalEvaluation });
+    await interviewReportService.generateForSession(toObject(completed));
+    return completed;
   },
 
   async getReport(sessionIdValue, user) {
     const session = await this.ensureOwnSession(sessionIdValue, user);
-    return { session, messages: await interviewRepository.listMessages(sessionIdValue) };
+    let interviewReport = await interviewReportService.findBySession(sessionIdValue);
+    if (!interviewReport && session.status === INTERVIEW_STATUS.COMPLETED) {
+      interviewReport = await interviewReportService.generateForSession(toObject(session));
+    }
+    return { session, messages: await interviewRepository.listMessages(sessionIdValue), interviewReport };
   },
 };

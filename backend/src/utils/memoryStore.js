@@ -2,6 +2,8 @@ export const memoryStore = {
   users: [],
   sessions: [],
   messages: [],
+  interviewQuestions: [],
+  interviewAnswers: [],
   syllabus: [],
   questions: [
     {
@@ -26,6 +28,9 @@ export const memoryStore = {
     },
   ],
   resumes: [],
+  interviewReports: [],
+  skillScores: [],
+  performanceMetrics: [],
   auditLogs: [],
 };
 

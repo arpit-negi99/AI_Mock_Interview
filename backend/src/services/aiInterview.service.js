@@ -62,11 +62,16 @@ function fallbackAnswer(session, syllabusDocuments, currentQuestion, answerTrans
   const uncertain = /\b(not sure|maybe|i think|confused|don't know|do not know)\b/i.test(answerTranscript);
   const reachedLimit = Number(session.currentQuestionIndex || 0) + 1 >= Number(session.totalQuestions || 5);
   const selected = pickTopic(session, syllabusDocuments);
+  const contextualFollowUp = session.contextualFollowUp;
   const evaluation = {
-    score: Math.max(2, Math.min(8, Math.round(wordCount / 8))),
+    score: Math.max(2, Math.min(9, Math.round((session.interviewState?.confidence || wordCount / 80) * 10))),
     strengths: wordCount > 20 ? ['Provided some explanatory detail'] : ['Attempted the answer'],
-    gaps: wordCount < 25 ? ['Needs more depth and concrete examples'] : ['Could connect concepts more explicitly'],
-    brief: wordCount < 25 ? 'The answer was brief and needs more technical depth.' : 'The answer was reasonable but can be sharpened with clearer tradeoffs.',
+    gaps: session.interviewState?.needsClarification || wordCount < 25
+      ? ['Needs more depth, ownership, and concrete examples']
+      : ['Could connect concepts more explicitly'],
+    brief: session.interviewState?.needsClarification || wordCount < 25
+      ? 'The answer was brief or vague and needs more technical depth.'
+      : 'The answer was reasonable but can be sharpened with clearer tradeoffs.',
   };
 
   if (reachedLimit) {
@@ -92,6 +97,13 @@ function fallbackAnswer(session, syllabusDocuments, currentQuestion, answerTrans
       expectedConcepts: currentQuestion?.expectedConcepts || selected.concepts,
       answerEvaluation: evaluation,
       reasoning: 'Fallback clarification for uncertain answer.',
+    };
+  }
+
+  if (contextualFollowUp && canCross) {
+    return {
+      ...contextualFollowUp,
+      answerEvaluation: evaluation,
     };
   }
 
@@ -177,17 +189,28 @@ export const aiInterviewService = {
     return withLlm(prompt, fallback);
   },
 
-  async processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, extraConstraint = '') {
-    const fallback = fallbackAnswer(session, syllabusDocuments, currentQuestion, answerTranscript);
-    const prompt = promptBuilder.processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, extraConstraint);
+  async processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, extraConstraint = '', contextUpdate = null) {
+    const contextualSession = {
+      ...session,
+      contextualFollowUp: contextUpdate?.suggestedFollowUp || session.contextualFollowUp,
+    };
+    const fallback = fallbackAnswer(contextualSession, syllabusDocuments, currentQuestion, answerTranscript);
+    const prompt = promptBuilder.processAnswer(contextualSession, syllabusDocuments, currentQuestion, answerTranscript, extraConstraint, contextUpdate);
     return withLlm(prompt, fallback);
   },
 
-  async processAnswerWithRepetitionGuard(session, syllabusDocuments, currentQuestion, answerTranscript) {
-    let result = await this.processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript);
+  async processAnswerWithRepetitionGuard(session, syllabusDocuments, currentQuestion, answerTranscript, contextUpdate = null) {
+    let result = await this.processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, '', contextUpdate);
     for (let attempt = 0; attempt < 2 && result.questionText && isQuestionRepeated(result.questionText, session.askedQuestions || []); attempt += 1) {
       const similar = (session.askedQuestions || []).find((question) => isQuestionRepeated(result.questionText, [question]));
-      result = await this.processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, `The proposed question was too similar to "${similar}". Choose a different topic and wording.`);
+      result = await this.processAnswer(
+        session,
+        syllabusDocuments,
+        currentQuestion,
+        answerTranscript,
+        `The proposed question was too similar to "${similar}". Choose a different topic and wording.`,
+        contextUpdate,
+      );
     }
     if (result.questionText && isQuestionRepeated(result.questionText, session.askedQuestions || [])) {
       const selected = pickTopic({ ...session, askedTopics: [...(session.askedTopics || []), result.topic].filter(Boolean) }, syllabusDocuments);
