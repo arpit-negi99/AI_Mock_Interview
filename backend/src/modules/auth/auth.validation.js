@@ -16,6 +16,7 @@ export const loginSchema = z.object({
   body: z.object({
     email: z.string().email(),
     password: z.string().min(8),
+    rememberMe: z.boolean().optional(),
   }),
   params: z.object({}).optional(),
   query: z.object({}).optional(),

@@ -12,6 +12,7 @@ export const protect = asyncHandler(async (req, _res, next) => {
   const decoded = jwt.verify(token, env.jwtSecret);
   const user = await userRepository.findById(decoded.id);
   if (!user || user.isActive === false) throw new AppError('User not found or inactive', 401);
+  if (!user.isVerified) throw new AppError('Please verify your email before signing in', 403);
 
   req.user = {
     id: user.id || user._id.toString(),

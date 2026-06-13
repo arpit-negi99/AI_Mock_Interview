@@ -53,6 +53,11 @@ export async function sendOtpEmail({ to, name, otp, purpose, expiresInMinutes })
     : 'Use this OTP to finish creating your account.';
 
   try {
+    if (env.nodeEnv === 'test' && !isSmtpConfigured()) {
+      logger.info('Skipping OTP email in test environment', { to, purpose });
+      return;
+    }
+
     await getTransporter().sendMail({
       from: env.smtp.from,
       to,

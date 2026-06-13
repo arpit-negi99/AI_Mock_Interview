@@ -7,5 +7,7 @@ export const APP_CONFIG = {
   storageKeys: {
     token: 'interviewai_token',
     user: 'interviewai_user',
+    csrfToken: 'interviewai_csrf_token',
+    rememberMe: 'interviewai_remember_me',
   },
 };

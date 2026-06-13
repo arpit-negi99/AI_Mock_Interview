@@ -16,7 +16,9 @@ export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { register, handleSubmit, setError, clearErrors, formState: { errors, isSubmitting } } = useForm({ defaultValues: { email: 'candidate@example.com', password: 'password123' } });
+  const { register, handleSubmit, setError, clearErrors, formState: { errors, isSubmitting } } = useForm({
+    defaultValues: { email: 'candidate@example.com', password: 'password123', rememberMe: true },
+  });
   const serverError = errors.root?.server?.message;
 
   async function onSubmit(values) {
@@ -45,6 +47,15 @@ export default function Login() {
           )}
           <Input label="Email" type="email" {...register('email', { required: 'Email is required' })} error={errors.email?.message} />
           <Input label="Password" type="password" {...register('password', { required: 'Password is required', minLength: { value: 8, message: 'Use at least 8 characters' } })} error={errors.password?.message} />
+          <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border"
+              style={{ accentColor: 'var(--accent)' }}
+              {...register('rememberMe')}
+            />
+            Remember me
+          </label>
           <Button type="submit" className="w-full" isLoading={isSubmitting}>Login</Button>
         </motion.form>
         <motion.div variants={item} className="mt-4 flex justify-between text-sm">
