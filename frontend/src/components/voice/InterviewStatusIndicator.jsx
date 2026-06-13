@@ -4,6 +4,7 @@ const labels = {
   idle: 'Idle',
   listening: 'Listening',
   processing: 'Processing answer',
+  'ai-speaking': 'AI is speaking',
   speaking: 'AI is speaking',
   error: 'Voice error',
 };

@@ -9,7 +9,7 @@ import { interviewSessionService } from '../../services/interviewSession.service
 export const voiceController = {
   answer: asyncHandler(async (req, res) => {
     emitToSession(req.params.sessionId, 'interview:thinking', { state: 'processing' });
-    const transcript = req.body.transcript || req.body.fallbackText || (await speechToTextService.transcribe({ file: req.file })).transcript;
+    const transcript = req.body.transcript || (await speechToTextService.transcribe({ file: req.file, fallbackText: req.file ? undefined : req.body.fallbackText })).transcript;
     const result = await interviewSessionService.processCandidateAnswer({
       sessionId: req.params.sessionId,
       user: req.user,

@@ -30,6 +30,20 @@ function pickTopic(session, syllabusDocuments = []) {
 }
 
 function fallbackFirstQuestion(session, syllabusDocuments) {
+  const resumeProject = session.resumeContext?.parsedProjects?.[0];
+  const resumeSkill = session.resumeContext?.parsedSkills?.[0];
+  if (session.interviewType === 'resume' && (resumeProject?.name || resumeSkill)) {
+    const focus = resumeProject?.name ? `your project ${resumeProject.name}` : `your experience with ${resumeSkill}`;
+    return {
+      questionText: `Alright, let's start with ${focus}. Can you walk me through what you built, the decisions you personally owned, and one technical challenge you had to solve?`,
+      questionType: 'main',
+      topic: resumeProject?.name || resumeSkill,
+      subject: 'Resume deep dive',
+      expectedConcepts: resumeProject?.techStack || [resumeSkill].filter(Boolean),
+      difficulty: session.difficulty || 'medium',
+      reasoning: 'Fallback resume-aware first question generated from parsed resume data.',
+    };
+  }
   const selected = pickTopic(session, syllabusDocuments);
   return {
     questionText: `Let's start with ${selected.topic}. Can you explain the core idea and walk me through a practical example?`,
@@ -129,9 +143,9 @@ async function callChatCompletion(prompt) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: env.openaiModel,
+      model: env.interviewerModel,
       messages: [
-        { role: 'system', content: 'You are a strict JSON-only interview engine.' },
+        { role: 'system', content: 'You are a strict JSON-only voice interview engine. The JSON field questionText must sound natural when spoken aloud.' },
         { role: 'user', content: prompt },
       ],
       temperature: 0.4,

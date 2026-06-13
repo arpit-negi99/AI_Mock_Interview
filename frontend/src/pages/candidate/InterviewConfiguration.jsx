@@ -36,7 +36,7 @@ export default function InterviewConfiguration() {
       });
       const data = response.data || response;
       const sessionId = data.session.id || data.session._id;
-      navigate(ROUTES.INTERVIEW_SESSION, { state: { sessionId, firstQuestion: data.question?.text, duration: Number(values.duration) } });
+      navigate(ROUTES.INTERVIEW_SESSION, { state: { sessionId, firstQuestion: data.question?.text || data.firstQuestion, tts: data.tts, duration: Number(values.duration) } });
     } catch (error) {
       toast.error(error.message || 'Could not start interview');
     }
