@@ -1,12 +1,14 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { APP_CONFIG } from '@/constants/appConfig';
 import { authService, createMockSession, unwrapAuthSession } from '@/services/authService';
+import { clearStoredAuthSession, getStoredAccessToken, persistAuthSession } from '@/services/apiClient';
 import { AuthContext } from './authContext';
 
 function readStoredSession() {
-  const storedToken = localStorage.getItem(APP_CONFIG.storageKeys.token);
-  const storedUser = localStorage.getItem(APP_CONFIG.storageKeys.user);
+  const storedToken = getStoredAccessToken();
+  const storedUser = localStorage.getItem(APP_CONFIG.storageKeys.user)
+    || sessionStorage.getItem(APP_CONFIG.storageKeys.user);
   if (!storedToken || !storedUser) {
     return { token: null, user: null };
   }
@@ -14,29 +16,28 @@ function readStoredSession() {
   try {
     return { token: storedToken, user: JSON.parse(storedUser) };
   } catch {
-    localStorage.removeItem(APP_CONFIG.storageKeys.token);
-    localStorage.removeItem(APP_CONFIG.storageKeys.user);
+    clearStoredAuthSession();
     return { token: null, user: null };
   }
 }
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(readStoredSession);
+  const [isBootstrapping, setIsBootstrapping] = useState(!APP_CONFIG.enableMocks);
   const { user, token } = session;
 
-  const persistSession = useCallback((session) => {
-    localStorage.setItem(APP_CONFIG.storageKeys.token, session.token);
-    localStorage.setItem(APP_CONFIG.storageKeys.user, JSON.stringify(session.user));
-    setSession(session);
+  const persistSession = useCallback((nextSession, rememberMe = true) => {
+    persistAuthSession(nextSession, rememberMe);
+    setSession({ token: nextSession.token, user: nextSession.user });
   }, []);
 
   const login = useCallback(async (credentials) => {
-    const session = APP_CONFIG.enableMocks
+    const nextSession = APP_CONFIG.enableMocks
       ? createMockSession(credentials.email)
       : unwrapAuthSession(await authService.login(credentials));
-    persistSession(session);
+    persistSession(nextSession, credentials.rememberMe !== false);
     toast.success('Welcome back');
-    return session.user;
+    return nextSession.user;
   }, [persistSession]);
 
   const register = useCallback(async (payload) => {
@@ -46,34 +47,64 @@ export function AuthProvider({ children }) {
   }, []);
 
   const verifyRegistration = useCallback(async (payload) => {
-    const session = APP_CONFIG.enableMocks
+    const nextSession = APP_CONFIG.enableMocks
       ? createMockSession(payload.email)
       : unwrapAuthSession(await authService.verifyRegistration(payload));
-    persistSession(session);
+    persistSession(nextSession, true);
     toast.success('Account verified');
-    return session.user;
+    return nextSession.user;
   }, [persistSession]);
 
   const logout = useCallback(async ({ skipApi = false } = {}) => {
     if (!APP_CONFIG.enableMocks && !skipApi) {
       await authService.logout().catch(() => null);
     }
-    localStorage.removeItem(APP_CONFIG.storageKeys.token);
-    localStorage.removeItem(APP_CONFIG.storageKeys.user);
+    clearStoredAuthSession();
     setSession({ token: null, user: null });
     toast.success('Signed out');
   }, []);
+
+  useEffect(() => {
+    if (APP_CONFIG.enableMocks) return undefined;
+
+    let isMounted = true;
+    async function bootstrap() {
+      try {
+        if (getStoredAccessToken()) {
+          const response = await authService.me();
+          const currentUser = response?.data?.user || response?.user;
+          if (currentUser && isMounted) {
+            setSession((current) => ({ ...current, user: currentUser }));
+            return;
+          }
+        }
+
+        const refreshed = unwrapAuthSession(await authService.refresh());
+        if (isMounted) persistSession(refreshed, localStorage.getItem(APP_CONFIG.storageKeys.rememberMe) !== null);
+      } catch {
+        clearStoredAuthSession();
+        if (isMounted) setSession({ token: null, user: null });
+      } finally {
+        if (isMounted) setIsBootstrapping(false);
+      }
+    }
+
+    bootstrap();
+    return () => {
+      isMounted = false;
+    };
+  }, [persistSession]);
 
   const value = useMemo(() => ({
     user,
     token,
     isAuthenticated: Boolean(token && user),
-    isBootstrapping: false,
+    isBootstrapping,
     login,
     register,
     verifyRegistration,
     logout,
-  }), [login, logout, register, token, user, verifyRegistration]);
+  }), [isBootstrapping, login, logout, register, token, user, verifyRegistration]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

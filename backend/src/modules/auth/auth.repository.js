@@ -20,8 +20,12 @@ export const userRepository = {
     }
     return memoryStore.users.find((user) => user.email === email.toLowerCase()) || null;
   },
-  async findById(id) {
-    if (isDbConnected()) return User.findById(id);
+  async findById(id, includeSession = false) {
+    if (isDbConnected()) {
+      const query = User.findById(id);
+      if (includeSession) query.select('+refreshTokenHash +refreshTokenExpiresAt +csrfTokenHash');
+      return query;
+    }
     return memoryStore.users.find((user) => user.id === id) || null;
   },
   async updateById(id, data) {
