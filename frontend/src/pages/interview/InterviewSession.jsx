@@ -1,148 +1,111 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Send } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import { ROUTES } from '@/constants/routes';
-import { useAuth } from '@/hooks/useAuth';
-import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
-import { getSocket } from '@/services/socketClient';
+import { useVoiceInterview } from '@/hooks/useVoiceInterview';
 import { voiceInterviewService } from '@/services/voiceInterviewService';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/Button';
-import { Card } from '@/components/ui/Card';
 import { InterviewStatusIndicator } from '@/components/voice/InterviewStatusIndicator';
 import { InterviewTimer } from '@/components/voice/InterviewTimer';
 import { QuestionCard } from '@/components/voice/QuestionCard';
 import { SpeakingAnimation } from '@/components/voice/SpeakingAnimation';
 import { TranscriptBox } from '@/components/voice/TranscriptBox';
-import { VoicePlayer } from '@/components/voice/VoicePlayer';
 import { VoiceRecorder } from '@/components/voice/VoiceRecorder';
 
 export default function InterviewSession() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { token } = useAuth();
   const sessionId = location.state?.sessionId;
-  const [question, setQuestion] = useState(location.state?.firstQuestion || '');
   const [muted, setMuted] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const autoSubmitRef = useRef(null);
-  const { transcript, setTranscript, voiceState, setVoiceState, error, startListening, stopListening, resetTranscript, isSupported } = useSpeechRecognition({
-    silenceMs: 4500,
-    onSilence: (finalTranscript) => autoSubmitRef.current?.(finalTranscript),
+  const initialTts = location.state?.tts || location.state?.firstTts || null;
+
+  const interview = useVoiceInterview({
+    sessionId,
+    initialQuestion: location.state?.firstQuestion || '',
+    initialTts,
+    muted,
+    onEnded: () => {
+      toast.success('Interview completed');
+      navigate(ROUTES.FEEDBACK_REPORT, { state: { sessionId } });
+    },
+    onError: (error) => toast.error(error.message || 'Voice interview failed'),
   });
 
-  const socket = useMemo(() => getSocket(token), [token]);
+  const statusLabel = useMemo(() => ({
+    'ai-speaking': 'Alex is speaking',
+    listening: 'Listening',
+    processing: 'Thinking',
+    idle: 'Ready',
+    error: 'Needs attention',
+  }[interview.state] || 'Ready'), [interview.state]);
 
-  const speak = useCallback((text) => {
-    if (!text || muted || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    setVoiceState('speaking');
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'en-US';
-    utterance.onend = () => setVoiceState('idle');
-    utterance.onerror = () => setVoiceState('error');
-    window.speechSynthesis.speak(utterance);
-  }, [muted, setVoiceState]);
+  if (!sessionId) {
+    navigate(ROUTES.INTERVIEW_CONFIGURATION);
+    return null;
+  }
 
-  useEffect(() => {
-    if (!sessionId) {
-      navigate(ROUTES.INTERVIEW_CONFIGURATION);
-      return;
-    }
-    socket.connect();
-    socket.emit('interview:start', { sessionId });
-    socket.on('ai:question', (payload) => {
-      const text = payload.question?.text || payload.question?.questionText || payload.aiResult?.questionText;
-      setQuestion(text);
-      resetTranscript();
-      speak(text);
-    });
-    socket.on('ai:follow-up', (payload) => {
-      const text = payload.question?.text || payload.aiResult?.questionText;
-      setQuestion(text);
-      resetTranscript();
-      speak(text);
-    });
-    socket.on('ai:clarification', (payload) => {
-      const text = payload.question?.text || payload.aiResult?.questionText;
-      setQuestion(text);
-      resetTranscript();
-      speak(text);
-    });
-    socket.on('interview:processing', () => setVoiceState('processing'));
-    socket.on('interview:ended', (payload) => {
-      const text = payload.question?.text || payload.aiResult?.questionText || 'Interview completed.';
-      setQuestion(text);
-      speak(text);
-      toast.success('Interview ended');
-    });
-    socket.on('interview:error', (payload) => toast.error(payload.message || 'Socket error'));
-    return () => {
-      socket.off('ai:question');
-      socket.off('ai:follow-up');
-      socket.off('ai:clarification');
-      socket.off('interview:processing');
-      socket.off('interview:ended');
-      socket.off('interview:error');
-      socket.disconnect();
-    };
-  }, [navigate, resetTranscript, sessionId, socket, speak, setVoiceState]);
-
-  const submitAnswer = useCallback(async (answerText = transcript) => {
-    const finalTranscript = answerText.trim();
-    if (!finalTranscript) {
-      toast.error('Record or type an answer transcript first');
-      return;
-    }
-    setIsSubmitting(true);
-    setVoiceState('processing');
-    try {
-      const response = await voiceInterviewService.answerText(sessionId, finalTranscript);
-      const data = response.data || response;
-      const text = data.question?.text || data.aiResult?.questionText;
-      setQuestion(text);
-      resetTranscript();
-      speak(text);
-    } catch (err) {
-      toast.error(err.message || 'Answer submission failed');
-      setVoiceState('error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [resetTranscript, sessionId, setVoiceState, speak, transcript]);
-
-  useEffect(() => {
-    autoSubmitRef.current = submitAnswer;
-  }, [submitAnswer]);
+  const endInterview = async () => {
+    await voiceInterviewService.end(sessionId);
+    navigate(ROUTES.CANDIDATE_DASHBOARD);
+  };
 
   return (
-    <>
-      <PageHeader
-        title="Voice interview room"
-        description="AI speaks the question, you answer with microphone input, and the backend stores the question-answer history."
-        actions={<InterviewStatusIndicator state={voiceState} />}
-      />
-      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-4">
-          <QuestionCard question={question} />
-          <VoiceRecorder state={voiceState} supported={isSupported} onStart={startListening} onStop={stopListening} onRetry={resetTranscript} />
-          <TranscriptBox transcript={transcript} onChange={setTranscript} />
-          {error && <p className="text-sm" style={{ color: 'var(--danger-text)' }}>{error}</p>}
-          <Button icon={Send} isLoading={isSubmitting} onClick={() => submitAnswer()}>Submit voice answer</Button>
+    <div className="min-h-[calc(100vh-96px)] rounded-none border border-slate-800 bg-[#090d12] p-4 text-slate-100 shadow-2xl sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <div>
+          <h1 className="text-xl font-semibold tracking-normal text-white">AI Interview Room</h1>
+          <p className="text-sm text-slate-400">Alex · Technical interviewer</p>
         </div>
-        <Card>
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold" style={{ color: 'var(--text-primary)' }}>Session</h2>
-            <InterviewTimer minutes={location.state?.duration || 15} onComplete={() => toast.success('Time limit reached')} />
-          </div>
-          <div className="mt-5 space-y-4">
-            {voiceState === 'speaking' && <SpeakingAnimation />}
-            <VoicePlayer muted={muted} onToggleMute={() => setMuted((value) => !value)} onReplay={() => speak(question)} />
-            <Button variant="danger" onClick={() => voiceInterviewService.end(sessionId).then(() => navigate(ROUTES.CANDIDATE_DASHBOARD))}>End interview</Button>
-          </div>
-        </Card>
+        <div className="flex items-center gap-3">
+          <InterviewStatusIndicator state={interview.state} />
+          <InterviewTimer minutes={location.state?.duration || 15} onComplete={() => toast.success('Time limit reached')} />
+        </div>
       </div>
-    </>
+
+      <div className="grid min-h-[520px] gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
+        <section className="flex min-h-[360px] flex-col items-center justify-center border border-slate-800 bg-[#101720] p-6">
+          <div className={`flex h-40 w-40 items-center justify-center rounded-full border ${interview.state === 'ai-speaking' ? 'border-cyan-300 shadow-[0_0_44px_rgba(34,211,238,0.24)]' : 'border-slate-700'}`}>
+            <div className="flex h-28 w-28 items-center justify-center rounded-full bg-slate-900 text-4xl font-semibold text-cyan-200">A</div>
+          </div>
+          <div className="mt-8 h-12">
+            {interview.state === 'ai-speaking' ? <SpeakingAnimation audioLevel={0.8} /> : <p className="text-sm text-slate-400">{statusLabel}</p>}
+          </div>
+          <div className="mt-8 w-full max-w-3xl">
+            <QuestionCard question={interview.question || 'Preparing your first question...'} />
+          </div>
+        </section>
+
+        <aside className="flex flex-col gap-4">
+          <div className="border border-slate-800 bg-[#101720] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Your answer</h2>
+              <span className="text-xs text-slate-500">{interview.state === 'listening' ? 'Auto-submit after silence' : 'Mic standby'}</span>
+            </div>
+            <VoiceRecorder
+              state={interview.state}
+              supported={Boolean(navigator.mediaDevices?.getUserMedia)}
+              audioLevel={interview.audioLevel}
+              onStart={interview.startListening}
+              onStop={interview.stopListening}
+              onRetry={() => interview.setTranscript('')}
+            />
+          </div>
+
+          <div className="min-h-56 border border-slate-800 bg-[#101720] p-4">
+            <TranscriptBox transcript={interview.transcript} onChange={interview.setTranscript} />
+          </div>
+
+          <div className="mt-auto flex flex-wrap items-center justify-center gap-3 border border-slate-800 bg-[#101720] p-4">
+            <Button icon={interview.state === 'listening' ? MicOff : Mic} onClick={interview.state === 'listening' ? interview.stopListening : interview.startListening} disabled={interview.state === 'processing' || interview.state === 'ai-speaking'}>
+              {interview.state === 'listening' ? 'Stop' : 'Answer'}
+            </Button>
+            <Button variant="secondary" icon={RotateCcw} onClick={interview.replay}>Replay</Button>
+            <Button variant="ghost" icon={muted ? VolumeX : Volume2} onClick={() => setMuted((value) => !value)}>{muted ? 'Unmute' : 'Mute'}</Button>
+            <Button variant="danger" icon={PhoneOff} onClick={endInterview}>End call</Button>
+          </div>
+        </aside>
+      </div>
+    </div>
   );
 }

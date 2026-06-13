@@ -21,6 +21,7 @@ const interviewSessionSchema = new mongoose.Schema({
   currentTopic: String,
   crossQuestionCount: { type: Number, default: 0 },
   maxCrossQuestions: { type: Number, default: 2 },
+  resumeContext: { type: mongoose.Schema.Types.Mixed },
   questionHistory: [{
     questionText: { type: String, required: true },
     questionType: { type: String, enum: ['main', 'followup', 'clarification', 'closing'], default: 'main' },

@@ -31,6 +31,41 @@ function historyBlock(session) {
   ].join('\n')).join('\n\n');
 }
 
+function adaptiveProfile(session) {
+  const notes = session.evaluationNotes || [];
+  if (!notes.length) return 'No scored answers yet. Start approachable and calibrate from the first response.';
+  const average = notes.reduce((sum, note) => sum + Number(note.score || 0), 0) / notes.length;
+  if (average >= 8) return `Running average ${average.toFixed(1)}/10. Increase difficulty, challenge edge cases, scalability, and tradeoffs.`;
+  if (average <= 4.5) return `Running average ${average.toFixed(1)}/10. Slow down, test fundamentals, and offer one gentle hint before moving on.`;
+  return `Running average ${average.toFixed(1)}/10. Maintain medium difficulty and probe for concrete examples.`;
+}
+
+function resumeContextBlock(session) {
+  const resume = session.resumeContext;
+  if (!resume) return 'No resume context provided.';
+  return JSON.stringify({
+    summary: resume.parsedSummary,
+    skills: resume.parsedSkills || [],
+    projects: resume.parsedProjects || [],
+    experience: resume.parsedExperience || [],
+    education: resume.parsedEducation || [],
+    certifications: resume.parsedCertifications || [],
+  }, null, 2);
+}
+
+function interviewerPersona(session) {
+  return [
+    'You are Alex, a senior technical interviewer at a top-tier tech company with 12 years of industry experience.',
+    'Your tone is professional, warm, natural, and spoken. Use brief acknowledgments and transitions, but do not grade the candidate in real time.',
+    'Keep every question speakable in 1-3 sentences. Never use markdown, bullet points, numbered lists, code blocks, or written-only formatting in questionText.',
+    'Probe vague answers, challenge strong answers with realistic constraints, and gently clarify contradictions from earlier answers.',
+    'Start easier, then adapt difficulty from the candidate response quality. For struggling answers, test fundamentals and offer a small hint.',
+    session.interviewType === 'resume'
+      ? 'Resume mode is active. Reference specific projects, skills, achievements, or roles from the resume whenever possible, and test whether claims are authentic and deep.'
+      : 'Prefer practical, real-world interview questions over trivia.',
+  ].join('\n');
+}
+
 function jsonOnlyInstruction(schema) {
   return [
     'Return only valid JSON. Do not wrap it in markdown fences. Do not include commentary outside JSON.',
@@ -52,10 +87,14 @@ export const promptBuilder = {
     };
 
     return [
+      interviewerPersona(session),
       `You are running a voice mock interview for type "${session.interviewType}".`,
       `Goal: ${typeGoals[session.interviewType] || 'test relevant interview readiness'}.`,
       `Difficulty target: ${session.difficulty}.`,
       `Candidate experience level: ${session.experienceLevel || 'not provided'}.`,
+      `Adaptive profile: ${adaptiveProfile(session)}.`,
+      'Resume context:',
+      resumeContextBlock(session),
       buildRepetitionGuard(session.askedQuestions || []),
       'Available syllabus documents:',
       JSON.stringify(serializeSyllabus(syllabusDocuments), null, 2),
@@ -86,10 +125,14 @@ export const promptBuilder = {
     }));
 
     return [
+      interviewerPersona(session),
       `System context: Interview type "${session.interviewType}" with goal "${typeGoals[session.interviewType] || 'assess interview readiness'}".`,
       `Current progress: question ${Number(session.currentQuestionIndex || 0) + 1} of ${session.totalQuestions}.`,
       `Maximum cross-questions allowed for the current question: ${session.maxCrossQuestions}. Current count: ${session.crossQuestionCount || 0}.`,
       `Duration minutes: ${session.duration}. Started at: ${session.startedAt || 'unknown'}.`,
+      `Adaptive profile: ${adaptiveProfile(session)}.`,
+      'Resume context:',
+      resumeContextBlock(session),
       buildRepetitionGuard(session.askedQuestions || []),
       extraConstraint ? `Additional hard constraint: ${extraConstraint}` : '',
       'Conversation history:',
@@ -116,6 +159,9 @@ export const promptBuilder = {
 
     return [
       'Generate a final voice mock interview evaluation from the full session record.',
+      `Adaptive profile: ${adaptiveProfile(session)}.`,
+      'Resume context:',
+      resumeContextBlock(session),
       'Question history:',
       JSON.stringify(session.questionHistory || [], null, 2),
       'Evaluation notes:',
