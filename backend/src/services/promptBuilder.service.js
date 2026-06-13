@@ -53,6 +53,29 @@ function resumeContextBlock(session) {
   }, null, 2);
 }
 
+function interviewContextBlock(session, contextUpdate = null) {
+  const memory = contextUpdate?.memory || session.interviewMemory || {};
+  const extraction = contextUpdate?.extraction || null;
+  const state = contextUpdate?.interviewState || session.interviewState || {};
+  const related = contextUpdate?.relatedExchanges || [];
+  const suggestedFollowUp = contextUpdate?.suggestedFollowUp || session.contextualFollowUp || null;
+
+  return JSON.stringify({
+    latestExtraction: extraction,
+    memorySummary: memory.summary || {},
+    topicDepth: contextUpdate?.topicDepth || session.topicDepth || [],
+    skillGraphTopNodes: (contextUpdate?.skillGraph?.nodes || session.skillGraph?.nodes || []).slice(0, 10),
+    relatedPriorExchanges: related.map((item) => ({
+      questionText: item.questionText,
+      topic: item.topic,
+      answerTranscript: item.answerTranscript,
+      similarity: Number(item.similarity || 0).toFixed(2),
+    })),
+    interviewState: state,
+    suggestedFollowUp,
+  }, null, 2);
+}
+
 function interviewerPersona(session) {
   return [
     'You are Alex, a senior technical interviewer at a top-tier tech company with 12 years of industry experience.',
@@ -103,7 +126,7 @@ export const promptBuilder = {
     ].join('\n\n');
   },
 
-  processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, extraConstraint = '') {
+  processAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, extraConstraint = '', contextUpdate = null) {
     const schema = {
       decision: 'ASK_FOLLOWUP | ASK_CLARIFICATION | NEXT_QUESTION | END_INTERVIEW',
       questionText: 'the next question or null if ending',
@@ -133,6 +156,8 @@ export const promptBuilder = {
       `Adaptive profile: ${adaptiveProfile(session)}.`,
       'Resume context:',
       resumeContextBlock(session),
+      'Dynamic interview memory and extracted answer context:',
+      interviewContextBlock(session, contextUpdate),
       buildRepetitionGuard(session.askedQuestions || []),
       extraConstraint ? `Additional hard constraint: ${extraConstraint}` : '',
       'Conversation history:',
@@ -142,7 +167,7 @@ export const promptBuilder = {
       'Available remaining syllabus:',
       JSON.stringify(remaining, null, 2),
       `Topics already covered: ${(session.askedTopics || []).join(', ') || 'none'}.`,
-      'Decision rules: ASK_FOLLOWUP for incomplete/vague answers when cross-question limit permits. ASK_CLARIFICATION for contradictory or uncertain answers. NEXT_QUESTION for adequate answers or when cross-question limit is reached. END_INTERVIEW when all topics are covered, question limit is reached, or duration elapsed.',
+      'Decision rules: ASK_FOLLOWUP for incomplete/vague answers or newly introduced skills/technologies when cross-question limit permits. ASK_CLARIFICATION for vague, contradictory, low-confidence, or unverifiable claims. Use related prior exchanges to connect answers instead of asking independent questions. Increase difficulty only when confidence and topic depth are strong. NEXT_QUESTION for adequate answers or when cross-question limit is reached. END_INTERVIEW when all topics are covered, question limit is reached, or duration elapsed.',
       jsonOnlyInstruction(schema),
     ].filter(Boolean).join('\n\n');
   },

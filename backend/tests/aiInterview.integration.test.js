@@ -9,7 +9,12 @@ import { interviewSessionService } from '../src/services/interviewSession.servic
 function resetMemoryStore() {
   memoryStore.sessions.length = 0;
   memoryStore.messages.length = 0;
+  memoryStore.interviewQuestions.length = 0;
+  memoryStore.interviewAnswers.length = 0;
   memoryStore.syllabus.length = 0;
+  memoryStore.interviewReports.length = 0;
+  memoryStore.skillScores.length = 0;
+  memoryStore.performanceMetrics.length = 0;
 }
 
 test('creates syllabus entries and retrieves active entries by interview type', async () => {
@@ -52,7 +57,7 @@ test('starts a session with selected syllabus IDs and returns a first generated 
   assert.equal(result.session.questionHistory.length, 1);
 });
 
-test('submitting an incomplete answer receives a follow-up and grows askedQuestions without duplicates', async () => {
+test('submitting an incomplete answer receives a clarification and grows askedQuestions without duplicates', async () => {
   resetMemoryStore();
   const syllabus = await syllabusRepository.create({
     interviewType: INTERVIEW_TYPES.DSA,
@@ -77,7 +82,7 @@ test('submitting an incomplete answer receives a follow-up and grows askedQuesti
   });
 
   assert.equal(result.ended, false);
-  assert.equal(result.questionType, 'followup');
+  assert.equal(result.questionType, 'clarification');
   assert.equal(result.session.askedQuestions.length, 2);
   assert.equal(new Set(result.session.askedQuestions).size, result.session.askedQuestions.length);
 });
@@ -144,6 +149,13 @@ test('answers can trigger END_INTERVIEW and report returns evaluation data', asy
   assert.equal(report.session.status, INTERVIEW_STATUS.COMPLETED);
   assert.ok(report.session.finalEvaluation.summary);
   assert.ok(report.session.evaluationNotes.length >= 1);
+  assert.ok(ended.interviewReport.finalScore >= 0);
+  assert.ok(report.interviewReport.aiFeedback.interviewReadinessScore >= 0);
+  assert.ok(report.interviewReport.skillBreakdown.length >= 1);
+  assert.ok(memoryStore.interviewQuestions.length >= 1);
+  assert.ok(memoryStore.interviewAnswers.length >= 1);
+  assert.ok(memoryStore.skillScores.length >= 1);
+  assert.ok(memoryStore.performanceMetrics.length >= 1);
 });
 
 test('submitting an answer to a completed session receives a 409 error', async () => {
