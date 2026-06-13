@@ -5,7 +5,13 @@ const resumeSchema = new mongoose.Schema({
   fileUrl: { type: String, required: true },
   extractedText: String,
   parsedSkills: [{ type: String }],
-  parsedProjects: [{ name: String, description: String }],
+  parsedProjects: [{ name: String, techStack: [String], description: String, keyAchievements: [String] }],
+  parsedExperience: [{ company: String, role: String, duration: String, description: String }],
+  parsedEducation: [{ institution: String, degree: String, year: String }],
+  parsedCertifications: [{ type: String }],
+  parsedSummary: String,
+  parsingStatus: { type: String, enum: ['pending', 'completed', 'failed'], default: 'pending' },
+  parsingError: String,
   uploadedAt: { type: Date, default: Date.now },
 });
 

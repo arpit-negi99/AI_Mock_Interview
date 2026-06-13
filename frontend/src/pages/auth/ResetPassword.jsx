@@ -1,11 +1,11 @@
-import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useForm } from "react-hook-form";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { APP_CONFIG } from "@/constants/appConfig";
 import { ROUTES } from "@/constants/routes";
 import { authService } from "@/services/authService";
 
@@ -18,28 +18,40 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 };
 
-export default function ForgotPassword() {
+export default function ResetPassword() {
+  const location = useLocation();
   const navigate = useNavigate();
+  const passedEmail = location.state?.email || "";
   const {
     register,
     handleSubmit,
     setError,
     clearErrors,
     formState: { errors, isSubmitting },
-  } = useForm();
+  } = useForm({
+    defaultValues: { email: passedEmail, otp: "", password: "" },
+  });
   const serverError = errors.root?.server?.message;
+
+  useEffect(() => {
+    if (!passedEmail) {
+      navigate(ROUTES.FORGOT_PASSWORD, { replace: true });
+    }
+  }, [navigate, passedEmail]);
 
   async function onSubmit(values) {
     clearErrors("root.server");
     try {
-      if (!APP_CONFIG.enableMocks) {
-        await authService.forgotPassword({ email: values.email });
-      }
-      toast.success("Password reset OTP sent to email");
-      navigate(ROUTES.RESET_PASSWORD, { state: { email: values.email } });
+      await authService.resetPassword({
+        email: values.email,
+        otp: values.otp,
+        password: values.password,
+      });
+      toast.success("Password reset successful");
+      navigate(ROUTES.RESET_PASSWORD_SUCCESS, { replace: true });
     } catch (error) {
       const message =
-        error?.message || "Unable to request password reset. Please try again.";
+        error?.message || "Unable to reset password. Please try again.";
       setError("root.server", { type: "server", message });
       toast.error(message);
     }
@@ -60,7 +72,7 @@ export default function ForgotPassword() {
           className="mt-2 text-sm"
           style={{ color: "var(--text-secondary)" }}
         >
-          Enter your account email to receive a password reset OTP.
+          Enter the OTP you received and choose a new password.
         </motion.p>
         <motion.form
           variants={item}
@@ -86,8 +98,27 @@ export default function ForgotPassword() {
             {...register("email", { required: "Email is required" })}
             error={errors.email?.message}
           />
+          <Input
+            label="OTP"
+            inputMode="numeric"
+            maxLength={6}
+            {...register("otp", {
+              required: "OTP is required",
+              pattern: { value: /^\d{6}$/, message: "Enter the 6 digit OTP" },
+            })}
+            error={errors.otp?.message}
+          />
+          <Input
+            label="New password"
+            type="password"
+            {...register("password", {
+              required: "Password is required",
+              minLength: { value: 8, message: "Use at least 8 characters" },
+            })}
+            error={errors.password?.message}
+          />
           <Button type="submit" className="w-full" isLoading={isSubmitting}>
-            Email OTP
+            Reset password
           </Button>
         </motion.form>
       </motion.div>

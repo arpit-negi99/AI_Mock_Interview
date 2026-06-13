@@ -2,6 +2,7 @@ import { cacheSession } from '../config/redis.js';
 import { INTERVIEW_STATUS } from '../constants/interviewStatus.js';
 import { AppError } from '../utils/AppError.js';
 import { interviewRepository } from '../modules/interview/interview.repository.js';
+import { resumeRepository } from '../modules/resume/resume.repository.js';
 import { syllabusRepository } from '../modules/syllabus/syllabus.repository.js';
 import { aiInterviewService } from './aiInterview.service.js';
 import { textToSpeechService } from './textToSpeech.service.js';
@@ -37,6 +38,20 @@ function wordCount(text = '') {
   return text.split(/\s+/).filter(Boolean).length;
 }
 
+function compactResumeContext(resume) {
+  if (!resume) return null;
+  const value = toObject(resume);
+  return {
+    parsedSummary: value.parsedSummary || '',
+    parsedSkills: value.parsedSkills || [],
+    parsedProjects: value.parsedProjects || [],
+    parsedExperience: value.parsedExperience || [],
+    parsedEducation: value.parsedEducation || [],
+    parsedCertifications: value.parsedCertifications || [],
+    parsingStatus: value.parsingStatus,
+  };
+}
+
 export const interviewSessionService = {
   async startSession(candidateId, payload) {
     await syllabusRepository.seedSamples();
@@ -49,6 +64,7 @@ export const interviewSessionService = {
 
     const selectedTopics = [...new Set(syllabusDocuments.flatMap((item) => item.topics || []))];
     const selectedSubjects = [...new Set(syllabusDocuments.map((item) => item.subject).filter(Boolean))];
+    const latestResume = payload.interviewType === 'resume' ? await resumeRepository.findLatestByCandidate(candidateId) : null;
     const session = await interviewRepository.createSession({
       candidate: candidateId,
       interviewType: payload.interviewType,
@@ -66,6 +82,7 @@ export const interviewSessionService = {
       maxCrossQuestions: payload.maxCrossQuestions || 2,
       askedQuestions: [],
       askedTopics: [],
+      resumeContext: compactResumeContext(latestResume),
       questionHistory: [],
       evaluationNotes: [],
     });
@@ -179,6 +196,7 @@ export const interviewSessionService = {
     if (aiResult.decision === 'END_INTERVIEW') {
       const evaluating = await interviewRepository.updateSession(sessionIdValue, { ...evaluationPatch, status: INTERVIEW_STATUS.EVALUATING, endedAt: new Date() });
       const finalEvaluation = await aiInterviewService.generateFinalEvaluation(toObject(evaluating));
+      const closingText = 'Thank you. This interview is complete and your evaluation is ready.';
       const completed = await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.COMPLETED, finalEvaluation });
       return {
         ended: true,
@@ -186,7 +204,8 @@ export const interviewSessionService = {
         question: null,
         aiResult,
         finalEvaluation,
-        ttsText: 'Thank you. This interview is complete and your evaluation is ready.',
+        ttsText: closingText,
+        tts: await textToSpeechService.synthesize({ text: closingText }),
       };
     }
 
