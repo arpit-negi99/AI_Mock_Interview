@@ -18,10 +18,16 @@ const typeOptions = [
   { value: 'project', label: 'Project-Based Interview' },
 ];
 
+const levelOptions = [
+  { value: 'fresher', label: 'Fresher / beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' },
+];
+
 export default function InterviewConfiguration() {
   const navigate = useNavigate();
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: { interviewType: 'core_cse', difficulty: 'medium', duration: 15 },
+    defaultValues: { interviewType: 'core_cse', difficulty: 'medium', experienceLevel: 'intermediate', duration: 15 },
   });
 
   async function onSubmit(values) {
@@ -31,6 +37,7 @@ export default function InterviewConfiguration() {
         selectedSubjects: [],
         selectedTopics: [],
         difficulty: values.difficulty,
+        experienceLevel: values.experienceLevel,
         totalQuestions: 5,
         duration: Number(values.duration),
       });
@@ -48,6 +55,7 @@ export default function InterviewConfiguration() {
       <Card>
         <form className="grid gap-5 md:grid-cols-2" onSubmit={handleSubmit(onSubmit)}>
           <Select label="Interview category" {...register('interviewType', { required: true })} options={typeOptions} />
+          <Select label="Experience level" {...register('experienceLevel', { required: true })} options={levelOptions} />
           <DifficultySelector {...register('difficulty')} />
           <Input label="Duration in minutes" type="number" min="1" max="180" {...register('duration', { required: 'Duration is required' })} error={errors.duration?.message} />
           <div className="md:col-span-2"><Button type="submit" isLoading={isSubmitting}>Start Voice Interview</Button></div>
