@@ -3,13 +3,17 @@ import { speechToTextService } from '../../services/speechToText.service.js';
 import { textToSpeechService } from '../../services/textToSpeech.service.js';
 import { toPublicFileUrl } from '../../services/upload.service.js';
 import { successResponse } from '../../utils/apiResponse.js';
+import { AppError } from '../../utils/AppError.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { interviewSessionService } from '../../services/interviewSession.service.js';
+import { INTERVIEW_STATUS } from '../../constants/interviewStatus.js';
 
 export const voiceController = {
   answer: asyncHandler(async (req, res) => {
     emitToSession(req.params.sessionId, 'interview:thinking', { state: 'processing' });
-    const transcript = req.body.transcript || (await speechToTextService.transcribe({ file: req.file, fallbackText: req.file ? undefined : req.body.fallbackText })).transcript;
+    const session = await interviewSessionService.ensureOwnSession(req.params.sessionId, req.user);
+    if (session.status !== INTERVIEW_STATUS.ACTIVE) throw new AppError('Interview session is not active', 409);
+    const transcript = req.body.transcript || (await speechToTextService.transcribe({ file: req.file, fallbackText: req.body.fallbackText })).transcript;
     const result = await interviewSessionService.processCandidateAnswer({
       sessionId: req.params.sessionId,
       user: req.user,

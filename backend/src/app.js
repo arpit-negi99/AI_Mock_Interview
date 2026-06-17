@@ -15,12 +15,20 @@ import { notFoundMiddleware } from './middlewares/notFoundMiddleware.js';
 import { errorMiddleware } from './middlewares/errorMiddleware.js';
 import routes from './routes/index.js';
 
+const corsOrigin = (origin, callback) => {
+  if (!origin || env.clientOrigins.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+  callback(new Error(`CORS origin not allowed: ${origin}`));
+};
+
 export function createApp() {
   const app = express();
 
   app.use(requestContextMiddleware);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-  app.use(cors({ origin: env.clientOrigin, credentials: true }));
+  app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(compression());
   app.use(morgan('combined', { stream: { write: (message) => logger.info(message.trim()) } }));
   app.use(express.json({ limit: '1mb' }));

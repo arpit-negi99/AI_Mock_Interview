@@ -9,11 +9,13 @@ const [
   { InterviewContextManager },
   { aiInterviewService },
   { interviewReportService },
+  { buildLocalMainQuestion },
 ] = await Promise.all([
   import('../src/services/KeywordExtractionService.js'),
   import('../src/services/InterviewContextManager.js'),
   import('../src/services/aiInterview.service.js'),
   import('../src/services/interviewReport.service.js'),
+  import('../src/services/localQuestionEngine.service.js'),
 ]);
 
 test('extracts keywords, skills, technologies, claims, achievements, weaknesses, and projects', () => {
@@ -112,6 +114,121 @@ test('fallback answer uses contextual follow-up when LLM is unavailable', async 
   assert.equal(result.questionType, 'followup');
   assert.match(result.questionText, /Redux|React|Node\.js/);
   assert.ok(result.answerEvaluation.score >= 2);
+});
+
+test('local interviewer probes the current response before moving on', async () => {
+  const session = {
+    interviewType: 'project',
+    difficulty: 'medium',
+    currentQuestionIndex: 0,
+    totalQuestions: 5,
+    crossQuestionCount: 0,
+    maxCrossQuestions: 2,
+    askedQuestions: ['How did you design the data model?'],
+    askedTopics: ['Data Model'],
+    interviewState: { confidence: 0.58, needsClarification: false },
+  };
+  const currentQuestion = {
+    questionText: 'How did you design the data model?',
+    questionType: 'main',
+    topic: 'Data Model',
+    subject: 'Project Architecture',
+    expectedConcepts: ['indexes', 'transactions'],
+  };
+  const answer = 'I used MongoDB collections for users and orders with embedded items and simple references between related records.';
+  const contextUpdate = await InterviewContextManager.updateAfterAnswer({ session, currentQuestion, answerTranscript: answer });
+
+  const result = await aiInterviewService.processAnswer(
+    { ...session, interviewState: contextUpdate.interviewState },
+    [],
+    currentQuestion,
+    answer,
+    '',
+    contextUpdate,
+  );
+
+  assert.equal(result.questionType, 'followup');
+  assert.match(result.questionText, /indexes|MongoDB|concrete|limitation/i);
+  assert.equal(/Now let's move/i.test(result.questionText), false);
+});
+
+test('local interviewer adapts next main question after a strong answer', async () => {
+  const session = {
+    interviewType: 'project',
+    difficulty: 'medium',
+    currentQuestionIndex: 1,
+    totalQuestions: 5,
+    crossQuestionCount: 2,
+    maxCrossQuestions: 2,
+    askedQuestions: ['Tell me about scalability.'],
+    askedTopics: ['Scalability'],
+    interviewState: { confidence: 0.86, needsClarification: false, nextDifficulty: 'hard' },
+  };
+  const syllabus = [{
+    subject: 'Project Architecture',
+    topics: ['Scalability', 'Deployment'],
+    sampleConcepts: ['bottlenecks', 'validation'],
+    difficulty: 'medium',
+  }];
+  const currentQuestion = {
+    questionText: 'Tell me about scalability.',
+    questionType: 'main',
+    topic: 'Scalability',
+    subject: 'Project Architecture',
+    expectedConcepts: ['bottlenecks'],
+  };
+  const answer = 'I scaled the service by adding Redis caching, database indexes, queue based background jobs, metrics, alerts, and load tests for 5000 users, which reduced latency by 45 percent.';
+  const contextUpdate = await InterviewContextManager.updateAfterAnswer({ session, currentQuestion, answerTranscript: answer });
+
+  const result = await aiInterviewService.processAnswer(
+    { ...session, interviewState: { ...contextUpdate.interviewState, nextDifficulty: 'hard' }, topicDepth: contextUpdate.topicDepth },
+    syllabus,
+    currentQuestion,
+    answer,
+    '',
+    contextUpdate,
+  );
+
+  assert.equal(result.questionType, 'main');
+  assert.match(result.questionText, /Deployment|Design a realistic solution|bottleneck|validate/i);
+  assert.equal(result.decision, 'NEXT_QUESTION');
+});
+
+test('local question engine changes depth by candidate experience level', () => {
+  const syllabus = [{
+    subject: 'Arrays and Strings',
+    topics: ['Sliding Window'],
+    sampleConcepts: ['window bounds', 'complexity'],
+    difficulty: 'medium',
+  }];
+  const baseSession = {
+    id: 'level-demo',
+    interviewType: 'dsa',
+    difficulty: 'medium',
+    currentQuestionIndex: 1,
+    questionHistory: [],
+    askedQuestions: [],
+    askedTopics: [],
+  };
+
+  const beginner = buildLocalMainQuestion({
+    session: { ...baseSession, experienceLevel: 'fresher' },
+    syllabusDocuments: syllabus,
+    extraction: {},
+    answerTranscript: '',
+  });
+  const advanced = buildLocalMainQuestion({
+    session: { ...baseSession, experienceLevel: 'advanced' },
+    syllabusDocuments: syllabus,
+    extraction: {},
+    answerTranscript: '',
+  });
+
+  assert.equal(beginner.candidateLevel, 'beginner');
+  assert.equal(advanced.candidateLevel, 'advanced');
+  assert.match(beginner.questionText, /brute-force|step by step|time and space/i);
+  assert.match(advanced.questionText, /large|streaming|bottleneck|validate/i);
+  assert.notEqual(beginner.questionText, advanced.questionText);
 });
 
 test('builds professional report exports and analytics payloads', () => {

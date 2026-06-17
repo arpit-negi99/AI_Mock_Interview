@@ -1,5 +1,6 @@
 import { cacheSession } from '../config/redis.js';
 import { INTERVIEW_STATUS } from '../constants/interviewStatus.js';
+import { INTERVIEW_TYPES } from '../constants/interviewTypes.js';
 import { AppError } from '../utils/AppError.js';
 import { interviewRepository } from '../modules/interview/interview.repository.js';
 import { resumeRepository } from '../modules/resume/resume.repository.js';
@@ -66,14 +67,23 @@ export const interviewSessionService = {
 
     const selectedTopics = [...new Set(syllabusDocuments.flatMap((item) => item.topics || []))];
     const selectedSubjects = [...new Set(syllabusDocuments.map((item) => item.subject).filter(Boolean))];
-    const latestResume = payload.interviewType === 'resume' ? await resumeRepository.findLatestByCandidate(candidateId) : null;
+    const needsResumeContext = [INTERVIEW_TYPES.RESUME, INTERVIEW_TYPES.PROJECT].includes(payload.interviewType);
+    const latestResume = needsResumeContext ? await resumeRepository.findLatestByCandidate(candidateId) : null;
+    const resumeContext = compactResumeContext(latestResume);
+    if (payload.interviewType === INTERVIEW_TYPES.PROJECT && !resumeContext) {
+      throw new AppError('Upload a resume before starting a project-based interview.', 400);
+    }
+    if (payload.interviewType === INTERVIEW_TYPES.PROJECT && !resumeContext?.parsedProjects?.length) {
+      throw new AppError('No projects were found in the uploaded resume. Please upload a resume that includes your projects.', 400);
+    }
     const session = await interviewRepository.createSession({
       candidate: candidateId,
       interviewType: payload.interviewType,
       selectedSubjects: payload.selectedSubjects?.length ? payload.selectedSubjects : selectedSubjects,
       selectedTopics: payload.selectedTopics?.length ? payload.selectedTopics : selectedTopics,
       syllabusIds: syllabusDocuments.map((item) => item.id || item._id),
-      difficulty: payload.difficulty,
+      difficulty: payload.difficulty || 'medium',
+      experienceLevel: payload.experienceLevel || 'intermediate',
       totalQuestions: payload.totalQuestions || 5,
       duration: payload.duration || 15,
       status: INTERVIEW_STATUS.CREATED,
@@ -84,14 +94,14 @@ export const interviewSessionService = {
       maxCrossQuestions: payload.maxCrossQuestions || 2,
       askedQuestions: [],
       askedTopics: [],
-      resumeContext: compactResumeContext(latestResume),
+      resumeContext,
       interviewMemory: { exchanges: [], summary: {} },
       skillGraph: { nodes: [], edges: [] },
       conversationGraph: { nodes: [], edges: [] },
       topicDepth: [],
       interviewState: {
         answerQuality: 'unknown',
-        nextDifficulty: payload.difficulty,
+        nextDifficulty: payload.difficulty || 'medium',
         confidence: 0,
         averageTopicDepth: 0,
         needsClarification: false,

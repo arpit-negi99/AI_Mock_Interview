@@ -15,3 +15,5 @@ export const INTERVIEW_TOPICS = {
 };
 
 export const DIFFICULTIES = ['easy', 'medium', 'hard'];
+
+export const EXPERIENCE_LEVELS = ['fresher', 'intermediate', 'advanced'];

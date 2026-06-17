@@ -17,8 +17,48 @@ function technologyQuestion(technology, relatedSkill) {
   return `You mentioned ${technology}${relatedSkill ? ` while discussing ${relatedSkill}` : ''}. What was the hardest technical decision you made there?`;
 }
 
+const FOLLOW_UP_STYLES = [
+  'tradeoff',
+  'debugging',
+  'scale',
+  'testing',
+  'ownership',
+];
+
+function hashText(text = '') {
+  let hash = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) - hash + text.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function pickStyle({ answer = '', session = {}, extraction = {} }) {
+  const askedCount = (session.askedQuestions || []).length;
+  const seed = hashText(`${answer} ${(extraction.keywords || []).join(' ')} ${askedCount}`);
+  return FOLLOW_UP_STYLES[seed % FOLLOW_UP_STYLES.length];
+}
+
+function contextualSkillQuestion({ topic, skill, technology, project, style }) {
+  const focus = technology || skill || project || topic;
+  const projectPhrase = project ? ` in ${project}` : '';
+  if (style === 'debugging') {
+    return `Suppose ${focus}${projectPhrase} starts failing in production. What signals would you check first, and how would you narrow down the root cause?`;
+  }
+  if (style === 'scale') {
+    return `If traffic or data volume suddenly grew 10x for ${focus}${projectPhrase}, what part would break first and how would you redesign it?`;
+  }
+  if (style === 'testing') {
+    return `How would you test the most fragile part of ${focus}${projectPhrase}, and what edge case would you make sure not to miss?`;
+  }
+  if (style === 'ownership') {
+    return `What decision did you personally own around ${focus}${projectPhrase}, and what information changed your mind during implementation?`;
+  }
+  return `What tradeoff did you make around ${focus}${projectPhrase}, and why was that better than the main alternative?`;
+}
+
 export const FollowUpQuestionGenerator = {
-  generate({ session = {}, currentQuestion = {}, extraction = {}, memory = {}, relatedExchanges = [] }) {
+  generate({ session = {}, currentQuestion = {}, extraction = {}, memory = {}, relatedExchanges = [], answerTranscript = '' }) {
     const canCross = Number(session.crossQuestionCount || 0) < Number(session.maxCrossQuestions || 2);
     const reachedLimit = Number(session.currentQuestionIndex || 0) + 1 >= Number(session.totalQuestions || 5);
     const quality = qualityLevel(extraction);
@@ -30,6 +70,7 @@ export const FollowUpQuestionGenerator = {
     const project = strongest(extraction.projectNames);
     const weakness = strongest(extraction.weaknesses);
     const achievement = strongest(extraction.achievements);
+    const style = pickStyle({ answer: answerTranscript, session, extraction });
 
     if (reachedLimit) {
       return {
@@ -86,7 +127,9 @@ export const FollowUpQuestionGenerator = {
     if (technology) {
       return {
         decision: 'ASK_FOLLOWUP',
-        questionText: technologyQuestion(technology, skill),
+        questionText: quality === 'high'
+          ? contextualSkillQuestion({ topic, skill, technology, project, style })
+          : technologyQuestion(technology, skill),
         questionType: 'followup',
         topic: technology,
         subject,
@@ -98,7 +141,7 @@ export const FollowUpQuestionGenerator = {
     if (project) {
       return {
         decision: 'ASK_FOLLOWUP',
-        questionText: `For ${project}, what was the most important architecture decision you owned, and what went wrong before it worked?`,
+        questionText: contextualSkillQuestion({ topic, skill, technology, project, style }),
         questionType: 'followup',
         topic: project,
         subject,
@@ -116,6 +159,18 @@ export const FollowUpQuestionGenerator = {
         subject,
         expectedConcepts: ['connection', 'comparison', 'tradeoff'],
         reasoning: 'Semantic retrieval found a related prior exchange.',
+      };
+    }
+
+    if (skill && quality !== 'low') {
+      return {
+        decision: 'ASK_FOLLOWUP',
+        questionText: contextualSkillQuestion({ topic, skill, technology, project, style }),
+        questionType: 'followup',
+        topic: skill,
+        subject,
+        expectedConcepts: [skill, style, 'evidence'],
+        reasoning: 'Candidate provided enough signal to probe the mentioned skill dynamically.',
       };
     }
 

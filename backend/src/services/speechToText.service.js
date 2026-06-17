@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { env } from '../config/env.js';
 import { AppError } from '../utils/AppError.js';
+import { generateGeminiText } from './gemini.service.js';
 
 function mockTranscription(file) {
   if (!file) return { transcript: 'Mock transcript from uploaded audio answer.', confidence: 0.82, provider: 'mock-stt' };
@@ -43,10 +44,60 @@ async function transcribeWithOpenAi(file) {
   };
 }
 
+async function transcribeWithGemini(file) {
+  if (!env.geminiApiKey) throw new AppError('GEMINI_API_KEY is required for Gemini speech-to-text', 500);
+  if (!file?.path) throw new AppError('Audio file is required for transcription', 400);
+
+  const audio = await fs.readFile(file.path);
+  let transcript = '';
+  try {
+    transcript = await generateGeminiText([
+      {
+        text: [
+          'Transcribe this interview answer audio exactly.',
+          'Return only the spoken transcript as plain text.',
+          'Do not add explanations, labels, timestamps, markdown, or guesses.',
+          'If the audio is silent or unintelligible, return an empty string.',
+        ].join(' '),
+      },
+      {
+        inlineData: {
+          mimeType: file.mimetype || 'audio/webm',
+          data: audio.toString('base64'),
+        },
+      },
+    ], {
+      systemInstruction: 'You are a precise speech-to-text transcription engine.',
+      temperature: 0,
+    });
+  } catch (error) {
+    if (error.message === 'Gemini returned an empty response') {
+      throw new AppError('No speech was detected in the audio. Please record your answer again.', 400);
+    }
+    throw error;
+  }
+
+  const cleanedTranscript = transcript.replace(/^transcript:\s*/i, '').trim();
+  if (!cleanedTranscript) {
+    throw new AppError('No speech was detected in the audio. Please record your answer again.', 400);
+  }
+
+  return {
+    transcript: cleanedTranscript,
+    confidence: null,
+    language: 'en',
+    provider: 'gemini-stt',
+  };
+}
+
 export const speechToTextService = {
   async transcribe({ file, fallbackText }) {
     if (fallbackText) return { transcript: fallbackText, confidence: 1, provider: 'debug-text' };
-    if (env.mockStt || env.sttProvider === 'browser') return mockTranscription(file);
+    if (env.mockStt) return mockTranscription(file);
+    if (env.sttProvider === 'gemini') return transcribeWithGemini(file);
+    if (env.sttProvider === 'browser') {
+      throw new AppError('Browser STT requires a transcript in the request body; no server transcription was performed.', 400);
+    }
     if (env.sttProvider !== 'openai') throw new AppError(`Unsupported STT_PROVIDER "${env.sttProvider}"`, 500);
     return transcribeWithOpenAi(file);
   },

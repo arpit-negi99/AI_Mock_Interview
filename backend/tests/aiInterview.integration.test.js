@@ -15,6 +15,7 @@ function resetMemoryStore() {
   memoryStore.interviewReports.length = 0;
   memoryStore.skillScores.length = 0;
   memoryStore.performanceMetrics.length = 0;
+  memoryStore.resumes.length = 0;
 }
 
 test('creates syllabus entries and retrieves active entries by interview type', async () => {
@@ -47,12 +48,14 @@ test('starts a session with selected syllabus IDs and returns a first generated 
     interviewType: INTERVIEW_TYPES.CORE_CSE,
     selectedSyllabusIds: [syllabus.id],
     difficulty: 'medium',
+    experienceLevel: 'advanced',
     totalQuestions: 3,
     duration: 15,
     maxCrossQuestions: 1,
   });
 
   assert.ok(result.firstQuestion);
+  assert.equal(result.session.experienceLevel, 'advanced');
   assert.equal(result.session.askedQuestions.length, 1);
   assert.equal(result.session.questionHistory.length, 1);
 });
@@ -128,6 +131,24 @@ test('answers can trigger END_INTERVIEW and report returns evaluation data', asy
     topics: ['Scalability'],
     difficulty: 'medium',
     sampleConcepts: ['tradeoffs', 'bottlenecks'],
+  });
+  memoryStore.resumes.push({
+    id: 'resume-1',
+    candidate: 'candidate-1',
+    fileUrl: '/uploads/resumes/test-resume.pdf',
+    parsedSummary: 'Candidate built a scalable interview platform.',
+    parsedSkills: ['Node.js', 'MongoDB', 'queues'],
+    parsedProjects: [{
+      name: 'Voice Interview Platform',
+      techStack: ['Node.js', 'MongoDB', 'React'],
+      description: 'A voice-based mock interview system with adaptive questions.',
+      keyAchievements: ['Added adaptive project interviews'],
+    }],
+    parsedExperience: [],
+    parsedEducation: [],
+    parsedCertifications: [],
+    parsingStatus: 'completed',
+    uploadedAt: new Date(),
   });
   const started = await interviewSessionService.startSession('candidate-1', {
     interviewType: INTERVIEW_TYPES.PROJECT,

@@ -85,8 +85,11 @@ function interviewerPersona(session) {
     'Start easier, then adapt difficulty from the candidate response quality. For struggling answers, test fundamentals and offer a small hint.',
     session.interviewType === 'resume'
       ? 'Resume mode is active. Reference specific projects, skills, achievements, or roles from the resume whenever possible, and test whether claims are authentic and deep.'
+      : '',
+    session.interviewType === 'project'
+      ? 'Project mode is active. Ask from the projects listed in the resume context. Test ownership, architecture, tradeoffs, debugging, scaling, and implementation details. Do not ask generic project questions when resume projects are available.'
       : 'Prefer practical, real-world interview questions over trivia.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 function jsonOnlyInstruction(schema) {
@@ -113,15 +116,16 @@ export const promptBuilder = {
       interviewerPersona(session),
       `You are running a voice mock interview for type "${session.interviewType}".`,
       `Goal: ${typeGoals[session.interviewType] || 'test relevant interview readiness'}.`,
-      `Difficulty target: ${session.difficulty}.`,
-      `Candidate experience level: ${session.experienceLevel || 'not provided'}.`,
+      'Calibrate difficulty from the candidate response quality. Begin approachable, then adapt after each answer.',
       `Adaptive profile: ${adaptiveProfile(session)}.`,
       'Resume context:',
       resumeContextBlock(session),
       buildRepetitionGuard(session.askedQuestions || []),
       'Available syllabus documents:',
       JSON.stringify(serializeSyllabus(syllabusDocuments), null, 2),
-      'Pick a starting topic from the syllabus and ask one open-ended question appropriate for a spoken interview.',
+      session.interviewType === 'project'
+        ? 'Pick one project from the resume context and ask the first open-ended project deep-dive question.'
+        : 'Pick a starting topic from the syllabus and ask one open-ended question appropriate for a spoken interview.',
       jsonOnlyInstruction(schema),
     ].join('\n\n');
   },

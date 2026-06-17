@@ -9,6 +9,7 @@ const interviewSessionSchema = new mongoose.Schema({
   selectedTopics: [{ type: String }],
   syllabusIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Syllabus' }],
   difficulty: { type: String, enum: ['easy', 'medium', 'hard'], required: true },
+  experienceLevel: { type: String, enum: ['fresher', 'intermediate', 'advanced'], default: 'intermediate' },
   totalQuestions: { type: Number, default: 5 },
   duration: { type: Number, default: 15 },
   status: { type: String, enum: Object.values(INTERVIEW_STATUS), default: INTERVIEW_STATUS.ACTIVE },

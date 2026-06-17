@@ -1,17 +1,60 @@
-import { INTERVIEW_TYPES } from '../constants/interviewTypes.js';
+import {
+  buildLocalFirstQuestion,
+  buildLocalFollowUp,
+  buildLocalMainQuestion,
+} from './localQuestionEngine.service.js';
+import { env } from '../config/env.js';
+import { generateLlmJson, parseLlmJson } from './llm.service.js';
 
-const starterQuestions = {
-  [INTERVIEW_TYPES.CORE_CSE]: 'Can you explain the selected concept and one practical scenario where it matters?',
-  [INTERVIEW_TYPES.DSA]: 'Here is a problem: describe your approach, complexity, edge cases, and possible optimization.',
-  [INTERVIEW_TYPES.BEHAVIORAL]: 'Tell me about a situation where you handled a difficult challenge with clear communication.',
-  [INTERVIEW_TYPES.RESUME]: 'Walk me through one skill or internship from your resume and explain your contribution.',
-  [INTERVIEW_TYPES.PROJECT]: 'Explain the architecture of your selected project and the key technical choices you made.',
-};
+function topicDocumentsFromContext(context = {}) {
+  const subjects = context.selectedSubjects?.length ? context.selectedSubjects : ['General'];
+  const topics = context.selectedTopics?.length ? context.selectedTopics : subjects;
+  return subjects.map((subject, index) => ({
+    id: `context-${index}`,
+    subject,
+    topics: topics.filter(Boolean),
+    difficulty: context.difficulty || 'medium',
+    sampleConcepts: context.expectedAnswerConcepts || ['clarity', 'correctness', 'examples', 'tradeoffs'],
+  }));
+}
+
+function toSessionLikeContext(context = {}, history = []) {
+  const aiMessages = history.filter((item) => item.sender === 'ai');
+  return {
+    ...context,
+    id: context.sessionId,
+    currentQuestionIndex: context.currentQuestionIndex ?? aiMessages.length,
+    questionHistory: history.map((item) => ({
+      questionText: item.text || item.questionText,
+      answerTranscript: item.transcript || item.answerTranscript,
+      questionType: item.type || item.questionType,
+      topic: item.topic,
+    })),
+    askedQuestions: aiMessages.map((item) => item.text || item.questionText).filter(Boolean),
+    askedTopics: context.askedTopics || [],
+  };
+}
+
+function extractSimpleSignals(text = '') {
+  const technologies = ['React', 'Node.js', 'MongoDB', 'Express', 'Redux', 'JavaScript', 'Python', 'SQL', 'Docker', 'AWS']
+    .filter((item) => new RegExp(`\\b${item.replace('.', '\\.')}\\b`, 'i').test(text));
+  const keywords = [...new Set(text.toLowerCase().match(/\b[a-z][a-z0-9+#.-]{3,}\b/g) || [])].slice(0, 6);
+  return {
+    technologies,
+    skills: keywords.filter((item) => !technologies.map((tech) => tech.toLowerCase()).includes(item)).slice(0, 3),
+    keywords,
+    specificity: Math.min(1, keywords.length / 6),
+  };
+}
 
 export const aiQuestionService = {
   async generateNextQuestion(context) {
     const history = context.conversationHistory || [];
     const previousAnswer = context.candidateAnswerTranscript || '';
+    const session = toSessionLikeContext(context, history);
+    const syllabusDocuments = topicDocumentsFromContext(context);
+    const extraction = extractSimpleSignals(previousAnswer);
+    const currentQuestion = [...session.questionHistory].reverse().find((item) => item.questionText) || null;
     const isWeakAnswer = previousAnswer.split(/\s+/).filter(Boolean).length < 18;
     const canFollowUp = Number(context.followUpCount || 0) < 2;
     const shouldEnd = Number(context.currentQuestionIndex || 0) >= Number(context.totalQuestions || 5);
@@ -26,36 +69,67 @@ export const aiQuestionService = {
       };
     }
 
+    if (!env.mockAi) {
+      const raw = await generateLlmJson([
+        'You are conducting a realistic spoken mock interview.',
+        'Return only JSON matching this schema:',
+        JSON.stringify({
+          nextAction: 'ASK_MAIN_QUESTION | ASK_FOLLOW_UP | ASK_CLARIFICATION | END_INTERVIEW',
+          questionType: 'MAIN | FOLLOW_UP | CLARIFICATION | SYSTEM',
+          questionText: 'natural interview question text',
+          reason: 'why this question is appropriate',
+          expectedAnswerConcepts: ['concept'],
+        }, null, 2),
+        'Adapt to candidate level, selected topics, previous answers, and interview progress.',
+        'Do not repeat previous questions. Ask like a real interviewer, not like a worksheet.',
+        'Context:',
+        JSON.stringify({
+          ...context,
+          conversationHistory: history,
+          previousAnswer,
+        }, null, 2),
+      ].join('\n\n'), {
+        systemInstruction: 'You are a strict JSON-only interview question generator.',
+        temperature: 0.75,
+      });
+      const generated = parseLlmJson(raw, null);
+      if (!generated?.questionText) throw new Error('LLM did not return a valid question');
+      return generated;
+    }
+
     if (previousAnswer && isWeakAnswer && canFollowUp) {
+      const followUp = buildLocalFollowUp({ session, currentQuestion, extraction, answerTranscript: previousAnswer });
       return {
         nextAction: 'ASK_FOLLOW_UP',
         questionType: 'FOLLOW_UP',
-        questionText: 'Could you clarify that with a concrete example and explain the reasoning behind your answer?',
-        reason: 'Answer was brief or vague',
-        expectedAnswerConcepts: ['example', 'reasoning', 'tradeoff'],
+        questionText: followUp.questionText,
+        reason: followUp.reasoning,
+        expectedAnswerConcepts: followUp.expectedConcepts,
       };
     }
 
     if (previousAnswer && /not sure|maybe|i think/i.test(previousAnswer) && canFollowUp) {
+      const clarification = buildLocalFollowUp({ session, currentQuestion, extraction, answerTranscript: previousAnswer, clarify: true });
       return {
         nextAction: 'ASK_CLARIFICATION',
         questionType: 'CLARIFICATION',
-        questionText: 'What assumption are you making there, and how would you verify it in a real interview scenario?',
-        reason: 'Answer expressed uncertainty',
-        expectedAnswerConcepts: ['assumption', 'validation'],
+        questionText: clarification.questionText,
+        reason: clarification.reasoning,
+        expectedAnswerConcepts: clarification.expectedConcepts,
       };
     }
 
-    const topic = context.selectedTopics?.[0] || context.selectedSubjects?.[0] || 'the selected topic';
-    const base = starterQuestions[context.interviewType] || starterQuestions[INTERVIEW_TYPES.CORE_CSE];
-    const questionNumber = history.filter((item) => item.sender === 'ai').length + 1;
+    const aiMessages = history.filter((item) => item.sender === 'ai');
+    const localQuestion = aiMessages.length
+      ? buildLocalMainQuestion({ session, syllabusDocuments, extraction, answerTranscript: previousAnswer })
+      : buildLocalFirstQuestion(session, syllabusDocuments);
 
     return {
       nextAction: 'ASK_MAIN_QUESTION',
       questionType: 'MAIN',
-      questionText: `${base} Focus on ${topic}. Question ${questionNumber}.`,
-      reason: 'Proceeding to next main question',
-      expectedAnswerConcepts: ['clarity', 'correctness', 'practical reasoning'],
+      questionText: localQuestion.questionText,
+      reason: localQuestion.reasoning,
+      expectedAnswerConcepts: localQuestion.expectedConcepts,
     };
   },
 };

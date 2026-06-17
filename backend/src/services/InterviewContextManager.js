@@ -114,6 +114,7 @@ export const InterviewContextManager = {
       extraction,
       memory,
       relatedExchanges,
+      answerTranscript,
     });
 
     return {

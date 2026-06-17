@@ -2,73 +2,121 @@ import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { promptBuilder } from './promptBuilder.service.js';
 import { buildRepetitionGuard, isQuestionRepeated } from './repetitionGuard.service.js';
-
-function stripCodeFences(text = '') {
-  return text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
-}
-
-function safeJsonParse(raw, fallback) {
-  try {
-    return JSON.parse(stripCodeFences(raw));
-  } catch {
-    return fallback;
-  }
-}
-
-function firstSyllabus(syllabusDocuments = []) {
-  return syllabusDocuments[0] || { subject: 'General', topics: ['Interview readiness'], sampleConcepts: ['clarity', 'correctness'], difficulty: 'medium' };
-}
+import {
+  buildLocalFirstQuestion,
+  buildLocalFollowUp,
+  buildLocalMainQuestion,
+  pickLocalTopic,
+} from './localQuestionEngine.service.js';
+import { generateLlmJson, parseLlmJson } from './llm.service.js';
 
 function pickTopic(session, syllabusDocuments = []) {
-  const covered = new Set(session.askedTopics || []);
-  for (const item of syllabusDocuments) {
-    const topic = (item.topics || []).find((value) => !covered.has(value));
-    if (topic) return { subject: item.subject, topic, concepts: item.sampleConcepts || [], difficulty: item.difficulty || session.difficulty };
-  }
-  const fallback = firstSyllabus(syllabusDocuments);
-  return { subject: fallback.subject, topic: fallback.topics?.[0] || 'Interview readiness', concepts: fallback.sampleConcepts || [], difficulty: fallback.difficulty || session.difficulty };
-}
-
-function fallbackFirstQuestion(session, syllabusDocuments) {
-  const resumeProject = session.resumeContext?.parsedProjects?.[0];
-  const resumeSkill = session.resumeContext?.parsedSkills?.[0];
-  if (session.interviewType === 'resume' && (resumeProject?.name || resumeSkill)) {
-    const focus = resumeProject?.name ? `your project ${resumeProject.name}` : `your experience with ${resumeSkill}`;
-    return {
-      questionText: `Alright, let's start with ${focus}. Can you walk me through what you built, the decisions you personally owned, and one technical challenge you had to solve?`,
-      questionType: 'main',
-      topic: resumeProject?.name || resumeSkill,
-      subject: 'Resume deep dive',
-      expectedConcepts: resumeProject?.techStack || [resumeSkill].filter(Boolean),
-      difficulty: session.difficulty || 'medium',
-      reasoning: 'Fallback resume-aware first question generated from parsed resume data.',
-    };
-  }
-  const selected = pickTopic(session, syllabusDocuments);
+  const selected = pickLocalTopic(session, syllabusDocuments);
   return {
-    questionText: `Let's start with ${selected.topic}. Can you explain the core idea and walk me through a practical example?`,
-    questionType: 'main',
-    topic: selected.topic,
     subject: selected.subject,
-    expectedConcepts: selected.concepts,
-    difficulty: selected.difficulty,
-    reasoning: 'Fallback first question generated from selected syllabus.',
+    topic: selected.topic,
+    concepts: selected.concepts || [],
+    difficulty: selected.difficulty || session.difficulty,
   };
 }
 
-function fallbackAnswer(session, syllabusDocuments, currentQuestion, answerTranscript) {
+function pickAdaptiveTopic(session, syllabusDocuments = [], extraction = {}) {
+  const covered = new Set(session.askedTopics || []);
+  const weakTopics = (session.topicDepth || [])
+    .filter((item) => item.depthScore < 0.55 && !covered.has(item.topic))
+    .sort((a, b) => a.depthScore - b.depthScore);
+  if (weakTopics.length) {
+    const match = syllabusDocuments.find((item) => (item.topics || []).includes(weakTopics[0].topic));
+    return {
+      subject: match?.subject || 'Follow-up coverage',
+      topic: weakTopics[0].topic,
+      concepts: match?.sampleConcepts || extraction.skills || [],
+      difficulty: match?.difficulty || session.interviewState?.nextDifficulty || session.difficulty,
+    };
+  }
+
+  const mentioned = [...(extraction.skills || []), ...(extraction.technologies || []), ...(extraction.projectNames || [])]
+    .find((item) => item && !covered.has(item));
+  if (mentioned) {
+    return {
+      subject: 'Candidate-led thread',
+      topic: mentioned,
+      concepts: [mentioned, ...(extraction.keywords || []).slice(0, 3)],
+      difficulty: session.interviewState?.nextDifficulty || session.difficulty,
+    };
+  }
+
+  return pickTopic(session, syllabusDocuments);
+}
+
+function selectMissingConcept(expectedConcepts = [], answerTranscript = '') {
+  const lower = answerTranscript.toLowerCase();
+  return expectedConcepts.find((concept) => !lower.includes(String(concept).toLowerCase()));
+}
+
+function buildEvidenceFollowUp({ session, currentQuestion, extraction, answerTranscript }) {
+  const topic = currentQuestion?.topic || extraction.skills?.[0] || extraction.technologies?.[0] || 'that answer';
+  const expected = currentQuestion?.expectedConcepts || [];
+  const missingConcept = selectMissingConcept(expected, answerTranscript);
+  const technology = extraction.technologies?.[0];
+
+  if (missingConcept) {
+    const local = buildLocalFollowUp({
+      session,
+      currentQuestion,
+      extraction: { ...extraction, skills: [missingConcept, ...(extraction.skills || [])] },
+      answerTranscript,
+    });
+    return {
+      questionText: local.questionText,
+      expectedConcepts: local.expectedConcepts,
+      reasoning: `Local interviewer probed missing concept "${missingConcept}" for ${topic}.`,
+    };
+  }
+  if (technology) {
+    const local = buildLocalFollowUp({ session, currentQuestion, extraction, answerTranscript });
+    return {
+      questionText: local.questionText,
+      expectedConcepts: local.expectedConcepts,
+      reasoning: 'Local interviewer probed a technology mentioned in the answer.',
+    };
+  }
+  const local = buildLocalFollowUp({ session, currentQuestion, extraction, answerTranscript });
+  return {
+    questionText: local.questionText,
+    expectedConcepts: local.expectedConcepts,
+    reasoning: 'Local interviewer asked for evidence based on the current answer.',
+  };
+}
+
+function fallbackFirstQuestion(session, syllabusDocuments) {
+  return buildLocalFirstQuestion(session, syllabusDocuments);
+}
+
+function fallbackAnswer(session, syllabusDocuments, currentQuestion, answerTranscript, contextUpdate = null) {
   const wordCount = answerTranscript.split(/\s+/).filter(Boolean).length;
   const canCross = Number(session.crossQuestionCount || 0) < Number(session.maxCrossQuestions || 2);
   const uncertain = /\b(not sure|maybe|i think|confused|don't know|do not know)\b/i.test(answerTranscript);
   const reachedLimit = Number(session.currentQuestionIndex || 0) + 1 >= Number(session.totalQuestions || 5);
-  const selected = pickTopic(session, syllabusDocuments);
+  const extraction = contextUpdate?.extraction || {};
+  const selected = pickAdaptiveTopic(session, syllabusDocuments, extraction);
   const contextualFollowUp = session.contextualFollowUp;
+  const specificity = Number(extraction.specificity || 0);
+  const shouldProbeForEvidence = canCross && !contextualFollowUp && !uncertain && (wordCount < 55 || specificity < 0.65);
   const evaluation = {
-    score: Math.max(2, Math.min(9, Math.round((session.interviewState?.confidence || wordCount / 80) * 10))),
-    strengths: wordCount > 20 ? ['Provided some explanatory detail'] : ['Attempted the answer'],
+    score: Math.max(2, Math.min(9, Math.round(((session.interviewState?.confidence || wordCount / 80) * 0.7 + specificity * 0.3) * 10))),
+    strengths: [
+      wordCount > 20 ? 'Provided some explanatory detail' : 'Attempted the answer',
+      extraction.technologies?.length ? `Mentioned ${extraction.technologies.slice(0, 2).join(', ')}` : null,
+      extraction.achievements?.length ? 'Included an impact or outcome claim' : null,
+    ].filter(Boolean),
     gaps: session.interviewState?.needsClarification || wordCount < 25
       ? ['Needs more depth, ownership, and concrete examples']
-      : ['Could connect concepts more explicitly'],
+      : [
+        selectMissingConcept(currentQuestion?.expectedConcepts || [], answerTranscript)
+          ? 'Could cover the expected concept more directly'
+          : 'Could connect concepts more explicitly',
+      ],
     brief: session.interviewState?.needsClarification || wordCount < 25
       ? 'The answer was brief or vague and needs more technical depth.'
       : 'The answer was reasonable but can be sharpened with clearer tradeoffs.',
@@ -89,14 +137,8 @@ function fallbackAnswer(session, syllabusDocuments, currentQuestion, answerTrans
 
   if (uncertain && canCross) {
     return {
-      decision: 'ASK_CLARIFICATION',
-      questionText: `What assumption are you making about ${currentQuestion?.topic || selected.topic}, and how would you verify it?`,
-      questionType: 'clarification',
-      topic: currentQuestion?.topic || selected.topic,
-      subject: currentQuestion?.subject || selected.subject,
-      expectedConcepts: currentQuestion?.expectedConcepts || selected.concepts,
+      ...buildLocalFollowUp({ session, currentQuestion, extraction, answerTranscript, clarify: true }),
       answerEvaluation: evaluation,
-      reasoning: 'Fallback clarification for uncertain answer.',
     };
   }
 
@@ -109,26 +151,30 @@ function fallbackAnswer(session, syllabusDocuments, currentQuestion, answerTrans
 
   if (wordCount < 25 && canCross) {
     return {
-      decision: 'ASK_FOLLOWUP',
-      questionText: `Can you go deeper on ${currentQuestion?.topic || selected.topic} with a concrete example and the key tradeoff involved?`,
-      questionType: 'followup',
-      topic: currentQuestion?.topic || selected.topic,
-      subject: currentQuestion?.subject || selected.subject,
-      expectedConcepts: currentQuestion?.expectedConcepts || selected.concepts,
+      ...buildLocalFollowUp({ session, currentQuestion, extraction, answerTranscript }),
       answerEvaluation: evaluation,
-      reasoning: 'Fallback follow-up for brief answer.',
     };
   }
 
+  if (shouldProbeForEvidence) {
+    const followUp = buildEvidenceFollowUp({ session, currentQuestion, extraction, answerTranscript });
+    return {
+      decision: 'ASK_FOLLOWUP',
+      questionText: followUp.questionText,
+      questionType: 'followup',
+      topic: currentQuestion?.topic || selected.topic,
+      subject: currentQuestion?.subject || selected.subject,
+      expectedConcepts: followUp.expectedConcepts,
+      answerEvaluation: evaluation,
+      reasoning: followUp.reasoning,
+    };
+  }
+
+  const mainQuestion = buildLocalMainQuestion({ session, syllabusDocuments, extraction, answerTranscript });
   return {
     decision: 'NEXT_QUESTION',
-    questionText: `Now let's move to ${selected.topic}. How would you explain it and what mistakes should a candidate avoid?`,
-    questionType: 'main',
-    topic: selected.topic,
-    subject: selected.subject,
-    expectedConcepts: selected.concepts,
+    ...mainQuestion,
     answerEvaluation: evaluation,
-    reasoning: 'Fallback moved to the next syllabus topic.',
   };
 }
 
@@ -146,39 +192,29 @@ function fallbackFinalEvaluation(session) {
   };
 }
 
-async function callChatCompletion(prompt) {
-  if (env.mockAi || !env.openaiApiKey) return null;
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.openaiApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: env.interviewerModel,
-      messages: [
-        { role: 'system', content: 'You are a strict JSON-only voice interview engine. The JSON field questionText must sound natural when spoken aloud.' },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.4,
-      response_format: { type: 'json_object' },
-    }),
-  });
-  if (!response.ok) throw new Error(`LLM request failed with status ${response.status}`);
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
-}
-
 async function withLlm(prompt, fallback) {
+  if (env.mockAi) return fallback;
+
   try {
     if (env.nodeEnv === 'development') logger.debug('LLM prompt', { prompt });
-    const raw = await callChatCompletion(prompt);
-    if (!raw) return fallback;
+    const raw = await generateLlmJson(prompt, {
+      systemInstruction: 'You are a strict JSON-only voice interview engine. Ask natural, realistic interview questions that adapt to the candidate level and previous answers.',
+      temperature: 0.65,
+    });
     if (env.nodeEnv === 'development') logger.debug('LLM raw output', { raw });
-    return safeJsonParse(raw, fallback);
+    const parsed = parseLlmJson(raw, null);
+    if (!parsed) throw new Error('LLM returned invalid JSON');
+    return parsed;
   } catch (error) {
     logger.error('LLM call failed', { error: error.message, prompt });
-    return { ...fallback, llmUnavailable: true };
+    if (error.statusCode === 429 || env.allowLocalAiFallback) {
+      return {
+        ...fallback,
+        llmUnavailable: true,
+        fallbackReason: error.statusCode === 429 ? 'llm_quota_exceeded' : 'llm_unavailable',
+      };
+    }
+    throw error;
   }
 }
 
@@ -194,7 +230,7 @@ export const aiInterviewService = {
       ...session,
       contextualFollowUp: contextUpdate?.suggestedFollowUp || session.contextualFollowUp,
     };
-    const fallback = fallbackAnswer(contextualSession, syllabusDocuments, currentQuestion, answerTranscript);
+    const fallback = fallbackAnswer(contextualSession, syllabusDocuments, currentQuestion, answerTranscript, contextUpdate);
     const prompt = promptBuilder.processAnswer(contextualSession, syllabusDocuments, currentQuestion, answerTranscript, extraConstraint, contextUpdate);
     return withLlm(prompt, fallback);
   },
@@ -213,15 +249,16 @@ export const aiInterviewService = {
       );
     }
     if (result.questionText && isQuestionRepeated(result.questionText, session.askedQuestions || [])) {
-      const selected = pickTopic({ ...session, askedTopics: [...(session.askedTopics || []), result.topic].filter(Boolean) }, syllabusDocuments);
+      const nextQuestion = buildLocalMainQuestion({
+        session: { ...session, askedTopics: [...(session.askedTopics || []), result.topic].filter(Boolean) },
+        syllabusDocuments,
+        extraction: contextUpdate?.extraction || {},
+        answerTranscript,
+      });
       result = {
         ...result,
         decision: 'NEXT_QUESTION',
-        questionType: 'main',
-        questionText: `Let's switch topics to ${selected.topic}. What are the key ideas and one practical example?`,
-        topic: selected.topic,
-        subject: selected.subject,
-        expectedConcepts: selected.concepts,
+        ...nextQuestion,
         reasoning: 'Code-level repetition guard forced a topic change.',
       };
     }
