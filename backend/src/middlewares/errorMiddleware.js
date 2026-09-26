@@ -2,6 +2,7 @@ import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 
 export function errorMiddleware(error, req, res, _next) {
+  if (res.headersSent) return _next(error);
   const statusCode = error.statusCode || 500;
   const log = statusCode >= 500 ? logger.error.bind(logger) : logger.warn.bind(logger);
   log(error.message, {

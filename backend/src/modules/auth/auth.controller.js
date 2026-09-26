@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { ROLES } from '../../constants/roles.js';
 import { env } from '../../config/env.js';
@@ -66,7 +67,7 @@ function publicUser(user) {
 }
 
 function generateOtp() {
-  return String(Math.floor(100000 + Math.random() * 900000));
+  return String(randomInt(100000, 1000000));
 }
 
 async function createOtpData(purpose) {
@@ -166,7 +167,7 @@ export const authController = {
       name: payload.name,
       email,
       password: hashedPassword,
-      role: payload.role || ROLES.CANDIDATE,
+      role: ROLES.CANDIDATE,
       isVerified: false,
       isActive: true,
       ...otpData,

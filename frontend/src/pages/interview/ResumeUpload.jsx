@@ -18,7 +18,7 @@ export default function ResumeUpload() {
     formData.append('resume', file);
     setIsUploading(true);
     try {
-      await apiClient.post('/resume/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      await apiClient.post('/resume/upload', formData, { timeout: 60000, headers: { 'Content-Type': 'multipart/form-data' } });
       toast.success('Resume uploaded');
     } catch (error) {
       toast.error(error.message || 'Upload failed');
@@ -29,7 +29,7 @@ export default function ResumeUpload() {
 
   return (
     <>
-      <PageHeader title="Resume upload" description="Upload structure is ready for private storage URLs and future resume parsing." />
+      <PageHeader title="Resume upload" description="Add your resume to tailor interview questions to your skills and experience. PDF or text, up to 10 MB." />
       <Card>
         <label className="block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
           Resume file
@@ -37,7 +37,7 @@ export default function ResumeUpload() {
             className="mt-2 block w-full rounded-lg border p-2 text-sm"
             style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
             type="file"
-            accept=".pdf,.doc,.docx,.txt"
+            accept=".pdf,.txt"
             onChange={(event) => setFile(event.target.files?.[0] || null)}
           />
         </label>

@@ -27,17 +27,17 @@ The app uses React and Express, Gemini for AI generation, and MongoDB for persis
 | Database | MongoDB, Mongoose |
 | AI | Gemini REST API, structured JSON output validation |
 | Authentication | JSON Web Tokens, bcrypt, HTTP-only refresh cookies |
-| Email | Nodemailer with SMTP |
+| Email | Brevo HTTPS API for deployment; Nodemailer SMTP for local development |
 | Voice | Browser speech recognition and speech synthesis; server audio endpoints also exist |
 | Other infrastructure | Socket.IO, optional Redis/BullMQ, Winston logging |
 | Verification | Node.js test runner, ESLint, Vite production build |
 
 ## Prerequisites
 
-- **Node.js 22.12 or later within the 22.x release line**, with npm. This satisfies the installed dependency engine requirements.
+- **Node.js 22.22 or later within the 22.x release line**, with npm.
 - **MongoDB**, either local or an Atlas deployment, for durable accounts and interview history.
 - **A Gemini API key** for AI-generated interviews. Local question generation is available without one.
-- **SMTP credentials** for account verification and password-reset emails outside automated tests.
+- **Email credentials** for account verification and password-reset emails outside automated tests: SMTP locally, or a Brevo API key and verified sender for Render Free.
 - A browser with microphone permission for voice input. Speech recognition support varies; typing remains available.
 
 Redis is optional for local development. Run one backend process for the current session-locking implementation.
@@ -118,6 +118,8 @@ See [backend/.env.example](backend/.env.example) for the complete sample configu
 | `AI_TOTAL_TIMEOUT_MS` | Shared generation budget, default and maximum `25000` ms |
 | `AI_MAX_ATTEMPTS` | Attempts per model for retryable failures, default `2`, maximum `3` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Email transport for verification and password reset |
+| `EMAIL_PROVIDER` | `smtp` locally or `brevo` for HTTPS email delivery |
+| `BREVO_API_KEY`, `EMAIL_FROM`, `EMAIL_FROM_NAME` | Brevo API key, verified sender email and display name |
 | `ENABLE_REDIS` / `REDIS_URL` | Optional Redis integration; disabled by default |
 | `UPLOAD_DIR` | Local upload directory, default `uploads` |
 
@@ -152,7 +154,7 @@ The last main answer closes the session. Reopening an active interview URL resto
 
 No additional paid speech service is needed for the browser-based interview room. Gemini availability, quotas, and charges depend on the API key's project and billing configuration. The app does not enforce a spending cap or verify that a key belongs to a free-tier project.
 
-To avoid interview-generation API requests, set `MOCK_AI=true`. This applies to question generation and final interview evaluation; resume parsing and server-side audio transcription have separate provider paths and can still call external services. Do not treat this flag as a global offline switch.
+To avoid interview-generation and resume-parsing API requests, set `MOCK_AI=true`. Server-side audio transcription has a separate provider path controlled by `MOCK_STT` and can still call external services. Do not treat `MOCK_AI` as a global offline switch.
 
 Check whether the configured models are available to your key:
 
@@ -252,7 +254,7 @@ An account created during temporary-storage mode may not exist in MongoDB. Reloa
 
 ### Password reset returns 200 but no email arrives
 
-The endpoint intentionally returns the same conditional response for existing and missing accounts. HTTP 200 alone does not confirm an email was sent. Confirm that the account exists and is active, check the spam folder, and verify SMTP configuration and server logs. Reset codes expire after 10 minutes and can be used once.
+The endpoint intentionally returns the same conditional response for existing and missing accounts. HTTP 200 alone does not confirm an email was sent. Confirm that the account exists and is active, check the spam folder, and verify your email provider configuration and server logs. Reset codes expire after 10 minutes and can be used once.
 
 ### Gemini stops responding or reaches quota
 
@@ -268,7 +270,9 @@ Confirm the backend is listening, `VITE_API_BASE_URL` points to the correct API 
 
 ## Deployment considerations
 
-Use persistent MongoDB storage, HTTPS, strong secrets, working email delivery, and explicit production origins before deploying. Uploaded files currently use local disk storage, so deployment storage must be planned accordingly.
+Use the [deployment guide](DEPLOYMENT.md) and [Render Blueprint](render.yaml) to deploy the frontend and backend together on Render Free, with MongoDB Atlas and Brevo HTTPS OTP delivery. Production requires persistent MongoDB, HTTPS origins, strong secrets and working email settings; it does not fall back to temporary accounts.
+
+New PDF/text resume uploads persist in MongoDB GridFS with authenticated owner-only downloads. Previous local uploads require re-uploading. Audio uploads are temporary; transcripts and reports are retained in MongoDB. Never commit real `.env` files or deployment credentials.
 
 Session mutation locks and provider cooldowns are process-local. Multiple API instances need shared coordination and atomic database updates or transactions. Cross-document session/message/report writes are not crash-atomic. The current implementation should not be presented as a complete production-hardening solution.
 

@@ -8,5 +8,6 @@ const router = Router();
 router.use(protect);
 router.post('/upload', resumeUpload.single('resume'), resumeController.upload);
 router.get('/me', resumeController.me);
+router.get('/files/:fileId', resumeController.download);
 
 export default router;

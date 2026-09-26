@@ -9,7 +9,7 @@ const defaultClientOrigins = viteDevPorts.flatMap((port) => [
   `http://localhost:${port}`,
   `http://127.0.0.1:${port}`,
 ]);
-const configuredClientOrigins = (process.env.CLIENT_ORIGIN || '')
+const configuredClientOrigins = (process.env.CLIENT_ORIGIN || process.env.RENDER_EXTERNAL_URL || '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -80,4 +80,11 @@ export const env = {
     from: process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.MAIL_FROM || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.SMTP_MAIL || process.env.EMAIL_USER || process.env.EMAIL_USERNAME || process.env.MAIL_USER || process.env.MAIL_USERNAME || process.env.GMAIL_USER || '',
   },
   isProduction: nodeEnv === 'production',
+  serveFrontend: process.env.SERVE_FRONTEND === 'true' || (nodeEnv === 'production' && process.env.SERVE_FRONTEND !== 'false'),
+  trustProxyHops: Number(process.env.TRUST_PROXY_HOPS || (process.env.RENDER ? 1 : 0)),
+  emailProvider: process.env.EMAIL_PROVIDER || 'smtp',
+  brevoApiKey: process.env.BREVO_API_KEY || '',
+  emailFrom: process.env.EMAIL_FROM || process.env.SMTP_FROM || '',
+  emailFromName: process.env.EMAIL_FROM_NAME || 'InterviewAI',
+  emailTimeoutMs: 10000,
 };

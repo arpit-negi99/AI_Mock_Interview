@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { PDFParse } from 'pdf-parse';
 import { logger } from '../config/logger.js';
 import { generateLlmJson, parseLlmJson } from './llm.service.js';
+import { env } from '../config/env.js';
 
 function stripCodeFences(text = '') {
   return text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
@@ -58,7 +59,7 @@ async function extractPdfText(filePath) {
 }
 
 async function structureWithLlm(extractedText) {
-  if (!extractedText) return null;
+  if (!extractedText || env.mockAi) return null;
 
   const raw = await generateLlmJson([
     'Parse this resume into JSON with keys parsedSkills, parsedProjects, parsedExperience, parsedEducation, parsedCertifications, parsedSummary.',

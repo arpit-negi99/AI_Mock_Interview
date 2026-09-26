@@ -3,6 +3,10 @@ import { createId, memoryStore } from '../../utils/memoryStore.js';
 import { Resume } from './resume.model.js';
 
 export const resumeRepository = {
+  async findByFileId(fileStorageId, candidate) {
+    if (isDbConnected()) return Resume.findOne({ fileStorageId, candidate }).select('+fileStorageId');
+    return null;
+  },
   async create(data) {
     if (isDbConnected()) return Resume.create(data);
     const resume = { ...data, id: createId('resume'), uploadedAt: new Date() };

@@ -1,0 +1,61 @@
+services:
+  - type: web
+    name: interviewai
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm --prefix backend ci --omit=dev && npm --prefix frontend ci --include=dev && npm --prefix frontend run build
+    startCommand: npm --prefix backend start
+    healthCheckPath: /api/v1/health/ready
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: NODE_ENV
+        value: production
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: API_PREFIX
+        value: /api/v1
+      - key: JWT_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_FROM_NAME
+        value: InterviewAI
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
+      - key: AI_PROVIDER
+        value: gemini
+      - key: MOCK_AI
+        value: "false"
+      - key: ALLOW_LOCAL_AI_FALLBACK
+        value: "true"
+      - key: ENABLE_REDIS
+        value: "false"
+      - key: ALLOW_OPENAI
+        value: "false"
+      - key: MOCK_STT
+        value: "false"
+      - key: STT_PROVIDER
+        value: gemini
+      - key: MOCK_TTS
+        value: "true"
+      - key: VITE_API_BASE_URL
+        value: ""
+      - key: VITE_SOCKET_URL
+        value: ""
+      - key: VITE_ENABLE_MOCKS
+        value: "false"

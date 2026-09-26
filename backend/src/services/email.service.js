@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { AppError } from '../utils/AppError.js';
+import { sendBrevoEmail } from './emailTransport.service.js';
 
 let transporter;
 
@@ -25,6 +26,9 @@ function getTransporter() {
 
     transporter = nodemailer.createTransport({
       ...transportConfig,
+      connectionTimeout: env.emailTimeoutMs,
+      greetingTimeout: env.emailTimeoutMs,
+      socketTimeout: env.emailTimeoutMs,
       auth: {
         user: env.smtp.user,
         pass: env.smtp.pass,
@@ -58,8 +62,7 @@ export async function sendOtpEmail({ to, name, otp, purpose, expiresInMinutes })
       return;
     }
 
-    await getTransporter().sendMail({
-      from: env.smtp.from,
+    const email = {
       to,
       subject,
       text: `${message}\n\nOTP: ${otp}\nThis code expires in ${expiresInMinutes} minutes.`,
@@ -72,9 +75,16 @@ export async function sendOtpEmail({ to, name, otp, purpose, expiresInMinutes })
           <p>This code expires in ${expiresInMinutes} minutes.</p>
         </div>
       `,
-    });
+    };
+    if (env.emailProvider === 'brevo') {
+      await sendBrevoEmail(email, env);
+    } else if (env.emailProvider === 'smtp') {
+      await getTransporter().sendMail({ ...email, from: env.smtp.from });
+    } else {
+      throw new AppError('Email provider is not configured correctly.', 503);
+    }
   } catch (error) {
-    logger.error('OTP email failed', { error: error.message, to, purpose });
+    logger.error('OTP email failed', { provider: env.emailProvider, code: error.code, statusCode: error.statusCode, purpose });
     if (error instanceof AppError) throw error;
     throw new AppError('Unable to send OTP email. Please try again later.', 502);
   }

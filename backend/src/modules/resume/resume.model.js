@@ -3,6 +3,9 @@ import mongoose from 'mongoose';
 const resumeSchema = new mongoose.Schema({
   candidate: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   fileUrl: { type: String, required: true },
+  fileStorageId: { type: mongoose.Schema.Types.ObjectId, select: false },
+  originalFilename: String,
+  contentType: String,
   extractedText: String,
   parsedSkills: [{ type: String }],
   parsedProjects: [{ name: String, techStack: [String], description: String, keyAchievements: [String] }],

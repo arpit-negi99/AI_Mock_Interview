@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { env } from './env.js';
 import { logger } from './logger.js';
+import { AppError } from '../utils/AppError.js';
 
 function wait(ms) {
   return new Promise((resolve) => {
@@ -10,6 +11,7 @@ function wait(ms) {
 
 export async function connectDb() {
   if (!env.mongoUri) {
+    if (env.isProduction) throw new Error('MONGODB_URI is required in production');
     logger.warn('MONGODB_URI is empty. Running with in-memory development stores.');
     return false;
   }
@@ -26,6 +28,7 @@ export async function connectDb() {
       await mongoose.disconnect().catch(() => undefined);
 
       if (attempt === env.mongoConnectRetries) {
+        if (env.isProduction) throw new Error('MongoDB connection failed. Production startup stopped; temporary storage is disabled.');
         logger.error('MongoDB connection failed after retries. Falling back to in-memory stores.', {
           attempts: attempt,
           error: error.message,
@@ -46,5 +49,7 @@ export async function connectDb() {
 }
 
 export function isDbConnected() {
-  return mongoose.connection.readyState === 1;
+  const connected = mongoose.connection.readyState === 1;
+  if (!connected && env.isProduction) throw new AppError('Database temporarily unavailable. Please try again shortly.', 503);
+  return connected;
 }

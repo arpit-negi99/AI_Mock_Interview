@@ -1,0 +1,55 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import { Readable } from 'node:stream';
+import { once } from 'node:events';
+
+process.env.NODE_ENV = 'test';
+const { default: mongoose } = await import('mongoose');
+const { createApp } = await import('../src/app.js');
+const { resumeStorage } = await import('../src/services/resumeStorage.service.js');
+const { resumeRepository } = await import('../src/modules/resume/resume.repository.js');
+const { userRepository } = await import('../src/modules/auth/auth.repository.js');
+const { generateToken } = await import('../src/utils/generateToken.js');
+
+test('resume upload preserves bytes outside local disk and downloads require ownership', async (t) => {
+  const oldState = mongoose.connection._readyState;
+  mongoose.connection._readyState = 1;
+  t.after(() => { mongoose.connection._readyState = oldState; });
+  const owner = { id: new mongoose.Types.ObjectId().toString(), role: 'candidate', isVerified: true, email: 'owner@example.test' };
+  const other = { ...owner, id: new mongoose.Types.ObjectId().toString() };
+  const fileId = new mongoose.Types.ObjectId();
+  let uploadedPath;
+  let savedBytes;
+  let savedResume;
+  t.mock.method(userRepository, 'findById', async (id) => id === owner.id ? owner : other);
+  t.mock.method(resumeStorage, 'save', async (file, candidate) => {
+    assert.equal(candidate, owner.id);
+    uploadedPath = file.path;
+    savedBytes = await fs.readFile(file.path);
+    return fileId;
+  });
+  t.mock.method(resumeRepository, 'create', async (data) => { savedResume = data; return data; });
+  t.mock.method(resumeRepository, 'findByFileId', async (id, candidate) => id === String(fileId) && candidate === owner.id ? savedResume : null);
+  const download = t.mock.method(resumeStorage, 'download', () => Readable.from(savedBytes));
+  const server = createApp().listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const form = new FormData();
+  form.append('resume', new Blob(['Skills: JavaScript, React\nProjects\nInterview practice app'], { type: 'text/plain' }), 'my-resume.txt');
+  const response = await fetch(`${base}/api/v1/resume/upload`, { method: 'POST', headers: { Authorization: `Bearer ${generateToken(owner)}` }, body: form });
+  assert.equal(response.status, 201);
+  const { data } = await response.json();
+  assert.equal(data.resume.fileUrl, `/api/v1/resume/files/${fileId}`);
+  await assert.rejects(fs.access(uploadedPath), { code: 'ENOENT' });
+  const privateUrl = `${base}${data.resume.fileUrl}`;
+  assert.equal((await fetch(privateUrl)).status, 401);
+  assert.equal((await fetch(privateUrl, { headers: { Authorization: `Bearer ${generateToken(other)}` } })).status, 404);
+  assert.equal(download.mock.callCount(), 0);
+  const ownFile = await fetch(privateUrl, { headers: { Authorization: `Bearer ${generateToken(owner)}` } });
+  assert.equal(ownFile.status, 200);
+  assert.equal(ownFile.headers.get('cache-control'), 'private, no-store');
+  assert.match(ownFile.headers.get('content-disposition'), /attachment/);
+  assert.equal(await ownFile.text(), savedBytes.toString());
+});

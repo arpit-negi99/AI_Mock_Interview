@@ -6,7 +6,7 @@ export const registerSchema = z.object({
     name: z.string().min(2),
     email: z.string().trim().toLowerCase().email(),
     password: z.string().min(8),
-    role: z.enum(Object.values(ROLES)).optional(),
+    role: z.literal(ROLES.CANDIDATE).optional(),
   }),
   params: z.object({}).optional(),
   query: z.object({}).optional(),
