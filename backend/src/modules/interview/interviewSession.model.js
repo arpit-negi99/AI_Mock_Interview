@@ -20,6 +20,8 @@ const interviewSessionSchema = new mongoose.Schema({
   askedQuestions: [{ type: String }],
   askedTopics: [{ type: String }],
   currentTopic: String,
+  generationMode: { type: String, enum: ['ai', 'practice'] },
+  fallbackReason: String,
   crossQuestionCount: { type: Number, default: 0 },
   maxCrossQuestions: { type: Number, default: 2 },
   resumeContext: { type: mongoose.Schema.Types.Mixed },
@@ -40,6 +42,7 @@ const interviewSessionSchema = new mongoose.Schema({
     answeredAt: Date,
   }],
   evaluationNotes: [{
+    source: { type: String, enum: ['ai', 'heuristic'] },
     questionText: String,
     topic: String,
     score: Number,
@@ -49,6 +52,8 @@ const interviewSessionSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now },
   }],
   finalEvaluation: {
+    generationMode: String,
+    evaluationSource: String,
     overallPerformance: String,
     strongestAreas: [{ type: String }],
     areasNeedingImprovement: [{ type: String }],

@@ -1,12 +1,12 @@
 import { API_ENDPOINTS } from '@/constants/apiEndpoints';
 import { ROLES } from '@/constants/roles';
-import { apiClient } from './apiClient';
+import { apiClient, refreshAuthSession } from './apiClient';
 
 export const authService = {
   login: (payload) => apiClient.post(API_ENDPOINTS.AUTH.LOGIN, payload),
   register: (payload) => apiClient.post(API_ENDPOINTS.AUTH.REGISTER, payload),
   verifyRegistration: (payload) => apiClient.post(API_ENDPOINTS.AUTH.VERIFY_REGISTRATION, payload),
-  refresh: () => apiClient.post(API_ENDPOINTS.AUTH.REFRESH_TOKEN),
+  refresh: refreshAuthSession,
   forgotPassword: (payload) => apiClient.post(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, payload),
   resetPassword: (payload) => apiClient.post(API_ENDPOINTS.AUTH.RESET_PASSWORD, payload),
   logout: () => apiClient.post(API_ENDPOINTS.AUTH.LOGOUT),

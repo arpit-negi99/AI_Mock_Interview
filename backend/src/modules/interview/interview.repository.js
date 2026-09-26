@@ -26,7 +26,7 @@ export const interviewRepository = {
       currentQuestionIndex: data.currentQuestionIndex || 0,
       followUpCount: data.followUpCount || 0,
       crossQuestionCount: data.crossQuestionCount || 0,
-      maxCrossQuestions: data.maxCrossQuestions || 2,
+      maxCrossQuestions: data.maxCrossQuestions ?? 2,
       startedAt: data.startedAt || new Date(),
       createdAt: new Date(),
     };

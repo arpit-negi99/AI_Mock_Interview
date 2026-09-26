@@ -49,7 +49,6 @@ export default function FeedbackReport() {
   useEffect(() => {
     if (!sessionId) return;
     let active = true;
-    setIsLoading(true);
     interviewService.getReport(sessionId)
       .then((response) => {
         if (!active) return;
@@ -119,6 +118,8 @@ export default function FeedbackReport() {
         )}
       />
 
+      {session?.evaluationNotes?.some((note) => note.source !== 'ai') && <div role="note" className="mb-5 rounded-xl border p-4 text-sm leading-6" style={{ backgroundColor: 'var(--warning-soft)', borderColor: 'var(--border-primary)', color: 'var(--warning-text)' }}>Some answers were evaluated in local practice mode. Those scores are provisional estimates based on answer signals, not an AI assessment of technical correctness.</div>}
+
       <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
         <Card animate={false}>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -147,6 +148,7 @@ export default function FeedbackReport() {
 
         <Card animate={false}>
           <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Performance analysis</h2>
+          <p className="mt-2 text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>These dimension indicators are estimates from your answer evidence. The final score averages the recorded answer evaluations.</p>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <ScoreBar label="Technical knowledge" value={analysis.technicalKnowledge} />
             <ScoreBar label="Communication" value={analysis.communication} />
@@ -196,6 +198,18 @@ export default function FeedbackReport() {
           </ul>
         </Card>
       </div>
+
+      <Card animate={false} className="mt-5">
+        <h2 className="text-lg font-semibold">Your interview, question by question</h2>
+        <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Revisit your reasoning and use the feedback to shape your next practice session.</p>
+        <div className="mt-5 divide-y" style={{ borderColor: 'var(--border-primary)' }}>
+          {(session?.questionHistory || []).filter((item) => item.answeredAt).map((item, index) => {
+            const note = session.evaluationNotes?.[index];
+            return <details key={index} className="py-4"><summary className="cursor-pointer text-sm font-medium leading-6">{index + 1}. {item.questionText}</summary><p className="mt-3 whitespace-pre-wrap rounded-lg p-4 text-sm leading-7" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>{item.answerTranscript}</p>{note && <div className="mt-3 text-sm leading-6"><p><strong>{note.score}/10</strong> · {note.source === 'ai' ? 'AI feedback' : 'Practice estimate'}</p><p className="mt-1">{note.brief}</p>{note.gaps?.length > 0 && <p className="mt-2" style={{ color: 'var(--text-secondary)' }}>Work on: {note.gaps.join('; ')}</p>}</div>}</details>;
+          })}
+        </div>
+        {session?.finalEvaluation?.recommendedPracticePlan?.length > 0 && <div className="mt-6"><h3 className="font-semibold">Your next practice session</h3><ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>{session.finalEvaluation.recommendedPracticePlan.map((step, index) => <li key={index}>{step}</li>)}</ol></div>}
+      </Card>
 
       {session?.finalEvaluation?.summary ? (
         <p className="mt-5 text-sm" style={{ color: 'var(--text-tertiary)' }}>{session.finalEvaluation.summary}</p>

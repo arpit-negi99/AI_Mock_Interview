@@ -1,4 +1,5 @@
 import { INTERVIEW_TYPES } from '../constants/interviewTypes.js';
+import { practiceScenario } from './practiceScenarios.service.js';
 
 const conceptFallbacks = ['clarity', 'correctness', 'edge cases', 'tradeoffs'];
 
@@ -234,12 +235,14 @@ function composeMainQuestion({ session = {}, selected = {}, extraction = {}, ans
   const bridge = signal && String(signal).toLowerCase() !== String(selected.topic).toLowerCase()
     ? render(choose(bridgeTemplates, `${signal}:${selected.topic}:${level}`), { signal, topic: selected.topic })
     : '';
-  const ask = askForType({ interviewType: session.interviewType, level, style, concept });
+  const scenario = practiceScenario(selected.topic, level);
+  const ask = scenario?.questionText || askForType({ interviewType: session.interviewType, level, style, concept });
   return {
     questionText: cleanText([opener, bridge, ask].filter(Boolean).join(' ')),
     level,
     style,
     concept,
+    concepts: scenario?.concepts,
   };
 }
 
@@ -341,7 +344,7 @@ export function buildLocalFirstQuestion(session = {}, syllabusDocuments = []) {
     questionType: 'main',
     topic: selected.topic,
     subject: selected.subject,
-    expectedConcepts: selected.concepts || conceptFallbacks,
+    expectedConcepts: composed.concepts || selected.concepts || conceptFallbacks,
     difficulty: selected.difficulty || session.difficulty || 'medium',
     candidateLevel: composed.level,
     reasoning: `Generated locally for a ${composed.level} candidate using ${composed.style} interview style.`,
@@ -356,7 +359,7 @@ export function buildLocalMainQuestion({ session = {}, syllabusDocuments = [], e
     questionType: 'main',
     topic: selected.topic,
     subject: selected.subject,
-    expectedConcepts: selected.concepts || [composed.concept].filter(Boolean),
+    expectedConcepts: composed.concepts || selected.concepts || [composed.concept].filter(Boolean),
     difficulty: session.interviewState?.nextDifficulty || selected.difficulty || session.difficulty || 'medium',
     candidateLevel: composed.level,
     reasoning: `Generated locally for a ${composed.level} candidate using ${composed.style} interview style.`,

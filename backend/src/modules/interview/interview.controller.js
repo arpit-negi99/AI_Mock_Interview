@@ -5,6 +5,7 @@ import { getPagination, paginatedMeta } from '../../utils/pagination.js';
 import { interviewSessionService } from '../../services/interviewSession.service.js';
 import { interviewReportService } from '../../services/interviewReport.service.js';
 import { interviewRepository } from './interview.repository.js';
+import { isDbConnected } from '../../config/db.js';
 
 export const interviewController = {
   start: asyncHandler(async (req, res) => {
@@ -19,7 +20,7 @@ export const interviewController = {
   getById: asyncHandler(async (req, res) => {
     const session = await interviewSessionService.ensureOwnSession(req.params.sessionId, req.user);
     const messages = await interviewRepository.listMessages(req.params.sessionId);
-    return successResponse(res, { data: { session, messages } });
+    return successResponse(res, { data: { session, messages, storageMode: isDbConnected() ? 'persistent' : 'memory' } });
   }),
   end: asyncHandler(async (req, res) => {
     const session = await interviewSessionService.endSession(req.params.sessionId, req.user);

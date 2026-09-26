@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { APP_CONFIG } from '@/constants/appConfig';
+import { API_ENDPOINTS } from '@/constants/apiEndpoints';
 
 export class ApiError extends Error {
   constructor(message, status, details) {
@@ -17,6 +18,28 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
+let refreshPromise = null;
+const publicAuthEndpoints = new Set([
+  API_ENDPOINTS.AUTH.LOGIN,
+  API_ENDPOINTS.AUTH.REGISTER,
+  API_ENDPOINTS.AUTH.VERIFY_REGISTRATION,
+  API_ENDPOINTS.AUTH.FORGOT_PASSWORD,
+  API_ENDPOINTS.AUTH.RESET_PASSWORD,
+]);
+
+function getRequestPath(url = '') {
+  if (!url) return '';
+  try {
+    return new URL(url, APP_CONFIG.apiBaseUrl).pathname.replace(/^\/api\/v\d+/, '');
+  } catch {
+    return url;
+  }
+}
+
+function isPublicAuthRequest(url) {
+  return publicAuthEndpoints.has(getRequestPath(url));
+}
+
 function readCookie(name) {
   return document.cookie
     .split('; ')
@@ -33,6 +56,14 @@ export function getStoredCsrfToken() {
   return localStorage.getItem(APP_CONFIG.storageKeys.csrfToken)
     || sessionStorage.getItem(APP_CONFIG.storageKeys.csrfToken)
     || readCookie('interviewai_csrf');
+}
+
+export function hasStoredRefreshSession() {
+  return Boolean(
+    getStoredCsrfToken()
+    || localStorage.getItem(APP_CONFIG.storageKeys.rememberMe)
+    || sessionStorage.getItem(APP_CONFIG.storageKeys.rememberMe),
+  );
 }
 
 export function persistAuthSession(session, rememberMe = true) {
@@ -59,33 +90,44 @@ export function clearStoredAuthSession() {
   });
 }
 
-async function refreshAuthSession() {
-  const response = await axios.post(
-    `${APP_CONFIG.apiBaseUrl}/auth/refresh-token`,
-    null,
-    {
-      withCredentials: true,
-      headers: { 'x-csrf-token': getStoredCsrfToken() || '' },
-    },
-  );
-  const session = response.data?.data;
-  if (!session?.token || !session?.user) {
-    throw new ApiError('Unable to refresh session.', 401, response.data);
+export function refreshAuthSession() {
+  if (!refreshPromise) {
+    refreshPromise = axios.post(
+      `${APP_CONFIG.apiBaseUrl}/auth/refresh-token`,
+      null,
+      {
+        withCredentials: true,
+        headers: { 'x-csrf-token': getStoredCsrfToken() || '' },
+      },
+    ).then((response) => {
+      const session = response.data?.data;
+      if (!session?.token || !session?.user) {
+        throw new ApiError('Unable to refresh session.', 401, response.data);
+      }
+
+      const rememberMe = localStorage.getItem(APP_CONFIG.storageKeys.rememberMe) !== null;
+      persistAuthSession(session, rememberMe);
+      return session;
+    }).finally(() => {
+      refreshPromise = null;
+    });
   }
 
-  const rememberMe = localStorage.getItem(APP_CONFIG.storageKeys.rememberMe) !== null;
-  persistAuthSession(session, rememberMe);
-  return session;
+  return refreshPromise;
 }
 
 apiClient.interceptors.request.use((config) => {
   const token = getStoredAccessToken();
-  if (token) {
+  if (token && !isPublicAuthRequest(config.url)) {
     config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    delete config.headers.Authorization;
   }
   const csrfToken = getStoredCsrfToken();
-  if (csrfToken) {
+  if (csrfToken && !isPublicAuthRequest(config.url)) {
     config.headers['x-csrf-token'] = csrfToken;
+  } else {
+    delete config.headers['x-csrf-token'];
   }
   return config;
 });
@@ -95,7 +137,8 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const isAuthRefresh = originalRequest?.url?.includes('/auth/refresh-token');
-    const canRefresh = error.response?.status === 401 && !originalRequest?._retry && !isAuthRefresh;
+    const isPublicAuth = isPublicAuthRequest(originalRequest?.url);
+    const canRefresh = error.response?.status === 401 && !originalRequest?._retry && !isAuthRefresh && !isPublicAuth;
 
     if (canRefresh) {
       originalRequest._retry = true;

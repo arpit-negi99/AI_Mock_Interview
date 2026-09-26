@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import {
   BriefcaseBusiness,
   BrainCircuit,
@@ -20,6 +20,7 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { cn } from '@/utils/classNames';
 
 const typeOptions = [
@@ -43,13 +44,13 @@ export default function InterviewConfiguration() {
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     setValue,
     formState: { errors, isSubmitting },
   } = useForm({
-    defaultValues: { interviewType: 'core_cse', duration: 15 },
+    defaultValues: { interviewType: 'core_cse', duration: 15, experienceLevel: 'intermediate', difficulty: 'medium', totalQuestions: 5, maxCrossQuestions: 2 },
   });
-  const selectedType = watch('interviewType');
+  const selectedType = useWatch({ control, name: 'interviewType' });
   const needsResume = ['resume', 'project'].includes(selectedType);
 
   useEffect(() => {
@@ -103,14 +104,15 @@ export default function InterviewConfiguration() {
         interviewType: values.interviewType,
         selectedSubjects: [],
         selectedTopics: [],
-        difficulty: 'medium',
-        experienceLevel: 'intermediate',
-        totalQuestions: 5,
+        difficulty: values.difficulty,
+        experienceLevel: values.experienceLevel,
+        totalQuestions: Number(values.totalQuestions),
+        maxCrossQuestions: Number(values.maxCrossQuestions),
         duration: Number(values.duration),
       });
       const data = response.data || response;
       const sessionId = data.session.id || data.session._id;
-      navigate(ROUTES.INTERVIEW_SESSION, {
+      navigate(`${ROUTES.INTERVIEW_SESSION}?session=${encodeURIComponent(sessionId)}`, {
         state: {
           sessionId,
           firstQuestion: data.question?.text || data.firstQuestion,
@@ -125,7 +127,7 @@ export default function InterviewConfiguration() {
 
   return (
     <>
-      <PageHeader title="Voice interview setup" description="Choose the interview format. The interviewer will calibrate difficulty from your answers." />
+      <PageHeader eyebrow="YOUR NEXT OPPORTUNITY STARTS HERE" title="Practice with purpose." description="A thoughtful conversation, questions that go deeper, and feedback you can act on. Build an interview around your next step." />
       <Card className="p-0">
         <form className="grid gap-0 lg:grid-cols-[1fr_20rem]" onSubmit={handleSubmit(onSubmit)}>
           <section className="p-5 sm:p-6">
@@ -139,6 +141,7 @@ export default function InterviewConfiguration() {
                 <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Pick the track you want to practice.</p>
               </div>
             </div>
+
 
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {typeOptions.map((option) => {
@@ -173,6 +176,13 @@ export default function InterviewConfiguration() {
                 );
               })}
             </div>
+            <div className="mt-8 grid gap-4 sm:grid-cols-2">
+              <Select label="Your experience" {...register('experienceLevel')} options={[{ value: 'fresher', label: 'Entry level / student' }, { value: 'intermediate', label: 'Mid-level professional' }, { value: 'advanced', label: 'Senior / experienced' }]} />
+              <Select label="Starting difficulty" {...register('difficulty')} options={[{ value: 'easy', label: 'Build my foundations' }, { value: 'medium', label: 'Challenge my understanding' }, { value: 'hard', label: 'Pressure-test my expertise' }]} />
+            </div>
+            <div className="mt-8 grid gap-5 border-t pt-6 sm:grid-cols-3" style={{ borderColor: 'var(--border-primary)' }}>
+              {[['01', 'A real conversation', 'Follow-ups explore your reasoning and the examples you share.'], ['02', 'Your pace, your voice', 'Speak or type. Review each answer before submitting.'], ['03', 'A useful next step', 'Review your exchanges, strengths, gaps, and practice plan.']].map(([step, title, copy]) => <div key={step}><span className="text-xs font-semibold" style={{ color: 'var(--accent-text)' }}>{step}</span><h3 className="mt-2 text-sm font-semibold">{title}</h3><p className="mt-2 text-xs leading-6" style={{ color: 'var(--text-secondary)' }}>{copy}</p></div>)}
+            </div>
           </section>
 
           <aside className="border-t p-5 sm:p-6 lg:border-l lg:border-t-0" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-primary)' }}>
@@ -182,9 +192,12 @@ export default function InterviewConfiguration() {
                 type="number"
                 min="1"
                 max="180"
-                {...register('duration', { required: 'Duration is required' })}
+                {...register('duration', { required: 'Duration is required', min: { value: 1, message: 'At least 1 minute' }, max: { value: 180, message: 'Up to 180 minutes' } })}
                 error={errors.duration?.message}
               />
+              <Select label="Main questions" {...register('totalQuestions')} options={[3, 5, 8, 10].map((value) => ({ value, label: `${value} questions` }))} />
+              <Select label="Follow-up depth" {...register('maxCrossQuestions')} options={[{ value: 0, label: 'Main questions only' }, { value: 1, label: 'One follow-up per question' }, { value: 2, label: 'Up to two follow-ups' }, { value: 3, label: 'Deep dive: up to three' }]} />
+              <p className="text-xs leading-5" style={{ color: 'var(--text-secondary)' }}>Browser voice input and playback require no paid speech service. If AI is unavailable, you can continue with clearly labeled local practice questions.</p>
 
               {needsResume && (
                 <div className="rounded-lg border p-4" style={{ borderColor: 'var(--border-primary)', backgroundColor: 'var(--bg-secondary)' }}>

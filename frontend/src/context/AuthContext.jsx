@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { APP_CONFIG } from '@/constants/appConfig';
 import { authService, createMockSession, unwrapAuthSession } from '@/services/authService';
-import { clearStoredAuthSession, getStoredAccessToken, persistAuthSession } from '@/services/apiClient';
+import {
+  clearStoredAuthSession,
+  getStoredAccessToken,
+  hasStoredRefreshSession,
+  persistAuthSession,
+} from '@/services/apiClient';
 import { AuthContext } from './authContext';
 
 function readStoredSession() {
@@ -79,8 +84,10 @@ export function AuthProvider({ children }) {
           }
         }
 
-        const refreshed = unwrapAuthSession(await authService.refresh());
-        if (isMounted) persistSession(refreshed, localStorage.getItem(APP_CONFIG.storageKeys.rememberMe) !== null);
+        if (hasStoredRefreshSession()) {
+          const refreshed = unwrapAuthSession(await authService.refresh());
+          if (isMounted) persistSession(refreshed, localStorage.getItem(APP_CONFIG.storageKeys.rememberMe) !== null);
+        }
       } catch {
         clearStoredAuthSession();
         if (isMounted) setSession({ token: null, user: null });

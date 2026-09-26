@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ROUTES } from '@/constants/routes';
 import toast from 'react-hot-toast';
 import { useForm } from 'react-hook-form';
 import { motion } from 'framer-motion';
@@ -12,6 +14,7 @@ const container = { hidden: {}, show: { transition: { staggerChildren: 0.08 } } 
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.3 } } };
 
 export default function ForgotPassword() {
+  const navigate = useNavigate();
   const [pendingEmail, setPendingEmail] = useState('');
   const { register, handleSubmit, setError, clearErrors, formState: { errors, isSubmitting } } = useForm();
   const serverError = errors.root?.server?.message;
@@ -23,8 +26,8 @@ export default function ForgotPassword() {
         if (!APP_CONFIG.enableMocks) {
           await authService.forgotPassword({ email: values.email });
         }
-        setPendingEmail(values.email);
-        toast.success('Password reset OTP sent to email');
+        setPendingEmail(values.email.trim().toLowerCase());
+        toast.success('If an active account exists, a reset code will arrive by email.');
         return;
       }
 
@@ -34,6 +37,7 @@ export default function ForgotPassword() {
         await authService.resetPassword({ email: pendingEmail, otp: values.otp, password: values.password });
         toast.success('Password reset successful');
       }
+      navigate(ROUTES.LOGIN, { replace: true });
     } catch (error) {
       const message = error?.message || 'Unable to reset password. Please try again.';
       setError('root.server', { type: 'server', message });
@@ -46,7 +50,7 @@ export default function ForgotPassword() {
       <motion.div variants={container} initial="hidden" animate="show">
         <motion.h1 variants={item} className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Reset password</motion.h1>
         <motion.p variants={item} className="mt-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-          {pendingEmail ? `Enter the OTP sent to ${pendingEmail} and choose a new password.` : 'Enter your account email to receive a password reset OTP.'}
+          {pendingEmail ? `If an active account exists for ${pendingEmail}, check your inbox and spam folder for a code. It expires in 10 minutes.` : 'Enter your account email to request a password reset code.'}
         </motion.p>
         <motion.form variants={item} className="mt-6 space-y-4" onSubmit={handleSubmit(onSubmit)}>
           {serverError && (
@@ -63,7 +67,10 @@ export default function ForgotPassword() {
             </>
           )}
           <Button type="submit" className="w-full" isLoading={isSubmitting}>{pendingEmail ? 'Reset password' : 'Email OTP'}</Button>
+          {pendingEmail && <Button className="w-full" variant="secondary" disabled={isSubmitting} onClick={() => { setPendingEmail(''); clearErrors(); }}>Change email or request another code</Button>}
         </motion.form>
+        <p className="mt-5 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>If you created your account while temporary storage was active, it may have been lost when the server restarted. <Link to={ROUTES.REGISTER} className="underline" style={{ color: 'var(--accent-text)' }}>Create an account</Link> if you have not registered in the current database.</p>
+        <Link to={ROUTES.LOGIN} className="mt-4 inline-block text-sm underline" style={{ color: 'var(--accent-text)' }}>Back to sign in</Link>
       </motion.div>
     </Card>
   );

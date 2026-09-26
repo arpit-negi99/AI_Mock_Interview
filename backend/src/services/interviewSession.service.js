@@ -10,6 +10,15 @@ import { InterviewContextManager } from './InterviewContextManager.js';
 import { interviewReportService } from './interviewReport.service.js';
 import { textToSpeechService } from './textToSpeech.service.js';
 
+// Serialize mutations within this API process. The client also submits the observed
+// question count so a delayed retry cannot answer a newer question.
+const activeTurns = new Set();
+async function withSessionLock(id, action) {
+  if (activeTurns.has(id)) throw new AppError('Your previous answer is still being processed. Please wait.', 409);
+  activeTurns.add(id);
+  try { return await action(); } finally { activeTurns.delete(id); }
+}
+
 function sessionId(session) {
   return session.id || session._id.toString();
 }
@@ -91,7 +100,7 @@ export const interviewSessionService = {
       currentQuestionIndex: 0,
       followUpCount: 0,
       crossQuestionCount: 0,
-      maxCrossQuestions: payload.maxCrossQuestions || 2,
+      maxCrossQuestions: payload.maxCrossQuestions ?? 2,
       askedQuestions: [],
       askedTopics: [],
       resumeContext,
@@ -174,6 +183,8 @@ export const interviewSessionService = {
       askedAt: new Date(),
     };
     return {
+      generationMode: aiResult.generationMode || 'practice',
+      fallbackReason: aiResult.fallbackReason || null,
       askedQuestions: [...(session.askedQuestions || []), aiResult.questionText],
       askedTopics: aiResult.topic ? [...new Set([...(session.askedTopics || []), aiResult.topic])] : (session.askedTopics || []),
       currentTopic: aiResult.topic || session.currentTopic,
@@ -201,6 +212,7 @@ export const interviewSessionService = {
       questionText: currentQuestion?.questionText,
       topic: currentQuestion?.topic,
       score: Number(evaluation.score || 0),
+      source: evaluation.source || 'heuristic',
       strengths: evaluation.strengths || [],
       gaps: evaluation.gaps || [],
       brief: evaluation.brief || 'Answer processed.',
@@ -209,9 +221,16 @@ export const interviewSessionService = {
     return { questionHistory: history, evaluationNotes: [...(session.evaluationNotes || []), note] };
   },
 
-  async processCandidateAnswer({ sessionId: sessionIdValue, user, transcript, audioUrl }) {
+  async processCandidateAnswer(options) {
+    return withSessionLock(options.sessionId, () => this.processAnswerTurn(options));
+  },
+
+  async processAnswerTurn({ sessionId: sessionIdValue, user, transcript, audioUrl, expectedQuestionCount }) {
     let session = await this.ensureOwnSession(sessionIdValue, user);
     if (session.status !== INTERVIEW_STATUS.ACTIVE) throw new AppError('Interview session is not active', 409);
+    if (expectedQuestionCount !== undefined && Number(expectedQuestionCount) !== session.questionHistory.length) {
+      throw new AppError('This answer belongs to an earlier question. Refresh the interview to continue.', 409);
+    }
     if (wordCount(transcript || '') < 5) throw new AppError('Please elaborate before submitting your answer.', 400);
     if (hasExpired(session)) {
       await interviewRepository.updateSession(sessionIdValue, { status: INTERVIEW_STATUS.EXPIRED, endedAt: new Date() });
@@ -219,16 +238,6 @@ export const interviewSessionService = {
     }
 
     const messages = await interviewRepository.listMessages(sessionIdValue);
-
-    await interviewRepository.addMessage({
-      session: sessionIdValue,
-      sender: 'candidate',
-      type: 'answer',
-      text: transcript,
-      transcript,
-      audioUrl,
-      sequenceNumber: messages.length + 1,
-    });
 
     session = toObject(session);
     const syllabusDocuments = await syllabusRepository.findByIds((session.syllabusIds || []).map(String));
@@ -254,9 +263,13 @@ export const interviewSessionService = {
       toObject(await interviewRepository.findSessionById(sessionIdValue)),
       currentQuestion,
       transcript,
-      aiResult.answerEvaluation,
+      { ...aiResult.answerEvaluation, source: aiResult.evaluationSource || 'heuristic' },
       contextUpdate.extraction,
     );
+    await interviewRepository.addMessage({
+      session: sessionIdValue, sender: 'candidate', type: 'answer', text: transcript,
+      transcript, audioUrl, sequenceNumber: messages.length + 1,
+    });
     await interviewRepository.addAnswerRecord({
       candidate: session.candidate,
       session: sessionIdValue,
@@ -309,7 +322,12 @@ export const interviewSessionService = {
   },
 
   async endSession(sessionIdValue, user) {
+    return withSessionLock(sessionIdValue, () => this.finishSession(sessionIdValue, user));
+  },
+
+  async finishSession(sessionIdValue, user) {
     const session = await this.ensureOwnSession(sessionIdValue, user);
+    if (session.status === INTERVIEW_STATUS.COMPLETED) return session;
     if (![INTERVIEW_STATUS.ACTIVE, INTERVIEW_STATUS.EXPIRED].includes(session.status)) {
       throw new AppError('Interview session cannot be ended from its current state', 409);
     }

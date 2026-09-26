@@ -40,42 +40,31 @@ function assessedSkills(session = {}) {
     ...(memorySummary.skills || []),
     ...(memorySummary.technologies || []),
     ...(session.skillGraph?.nodes || []).map((node) => node.label),
-    ...(session.questionHistory || []).flatMap((item) => item.expectedConcepts || []),
+    ...(session.questionHistory || []).filter((item) => item.answerTranscript).map((item) => item.topic),
   ].filter(Boolean))].slice(0, 16);
 }
 
 function buildSkillBreakdown(session = {}) {
   const notes = session.evaluationNotes || [];
   const skills = assessedSkills(session);
-  const topicScores = new Map(notes.map((note) => [note.topic, Number(note.score || 0)]));
-  const graphWeights = new Map((session.skillGraph?.nodes || []).map((node) => [node.label, Number(node.weight || 1)]));
-  const maxWeight = Math.max(1, ...graphWeights.values());
-  const baseScore = average(notes.map((note) => note.score), 5);
-
   return skills.map((skill) => {
-    const topicScore = topicScores.get(skill);
-    const confidenceBoost = (graphWeights.get(skill) || 1) / maxWeight;
+    const exchanges = (session.questionHistory || []).filter((item) => item.answerTranscript && [item.topic, ...(item.extractedContext?.skills || []), ...(item.extractedContext?.technologies || [])].includes(skill));
+    const relevantNotes = notes.filter((note) => exchanges.some((item) => note.questionText ? item.questionText === note.questionText : item.topic === note.topic));
     return {
       label: skill,
-      score: clampScore(topicScore ?? baseScore * 0.75 + confidenceBoost * 2.5, baseScore),
-      evidence: (session.questionHistory || [])
-        .filter((item) => [
-          item.topic,
-          ...(item.expectedConcepts || []),
-          ...(item.extractedContext?.skills || []),
-          ...(item.extractedContext?.technologies || []),
-        ].includes(skill))
-        .map((item) => item.answerTranscript || item.questionText)
+      score: clampScore(average(relevantNotes.map((note) => note.score))),
+      evidence: exchanges
+        .map((item) => item.answerTranscript)
         .filter(Boolean)
         .slice(0, 2),
     };
-  }).sort((a, b) => b.score - a.score);
+  }).filter((item) => item.evidence.length).sort((a, b) => b.score - a.score);
 }
 
 function performanceAnalysis(session = {}, skillBreakdown = []) {
   const notes = session.evaluationNotes || [];
   const extractions = allExtractions(session);
-  const avgNote = average(notes.map((note) => note.score), 5);
+  const avgNote = average(notes.map((note) => note.score), 0);
   const avgConfidence = average(extractions.map((item) => item.confidence * 10), avgNote);
   const avgSpecificity = average(extractions.map((item) => item.specificity * 10), avgNote);
   const technicalSkills = skillBreakdown.filter((item) => /api|database|design|react|node|javascript|system|performance|security|testing|deployment|state/i.test(item.label));
@@ -106,7 +95,7 @@ function learningResources(weakSkills = []) {
 function buildReport(session = {}) {
   const skillBreakdown = buildSkillBreakdown(session);
   const analysis = performanceAnalysis(session, skillBreakdown);
-  const finalScore = clampScore(average(Object.values(analysis)), 0);
+  const finalScore = clampScore(average((session.evaluationNotes || []).map((note) => note.score)), 0);
   const weakSkills = skillBreakdown.filter((item) => item.score < 7).map((item) => item.label).slice(0, 5);
   const notes = session.evaluationNotes || [];
   const finalEvaluation = session.finalEvaluation || {};

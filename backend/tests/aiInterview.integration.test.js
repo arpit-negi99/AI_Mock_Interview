@@ -5,6 +5,39 @@ import { INTERVIEW_TYPES } from '../src/constants/interviewTypes.js';
 import { memoryStore } from '../src/utils/memoryStore.js';
 import { syllabusRepository } from '../src/modules/syllabus/syllabus.repository.js';
 import { interviewSessionService } from '../src/services/interviewSession.service.js';
+import { aiInterviewService } from '../src/services/aiInterview.service.js';
+
+test('zero follow-ups is respected and stale submissions cannot advance the session', async () => {
+  resetMemoryStore();
+  const started = await interviewSessionService.startSession('candidate-reliability', { interviewType: 'dsa', totalQuestions: 3, maxCrossQuestions: 0 });
+  const options = { sessionId: started.session.id, user: { id: 'candidate-reliability', role: 'candidate' }, transcript: 'I would inspect every item in the array.', expectedQuestionCount: 1 };
+  const result = await interviewSessionService.processCandidateAnswer(options);
+  assert.equal(result.session.maxCrossQuestions, 0);
+  assert.equal(result.questionType, 'main');
+  await assert.rejects(interviewSessionService.processCandidateAnswer(options), (error) => error.statusCode === 409);
+  assert.equal(memoryStore.interviewAnswers.length, 1);
+});
+
+test('simultaneous answers are serialized and a generation failure leaves no duplicate candidate message', async (t) => {
+  resetMemoryStore();
+  const started = await interviewSessionService.startSession('candidate-reliability', { interviewType: 'dsa', totalQuestions: 3 });
+  const original = aiInterviewService.processAnswerWithRepetitionGuard;
+  t.after(() => { aiInterviewService.processAnswerWithRepetitionGuard = original; });
+  let release;
+  let signalEntered;
+  const entered = new Promise((resolve) => { signalEntered = resolve; });
+  aiInterviewService.processAnswerWithRepetitionGuard = async () => { signalEntered(); return new Promise((_resolve, reject) => { release = () => reject(new Error('Simulated outage')); }); };
+  const options = { sessionId: started.session.id, user: { id: 'candidate-reliability', role: 'candidate' }, transcript: 'I would inspect every item in the array.', expectedQuestionCount: 1 };
+  const pending = interviewSessionService.processCandidateAnswer(options);
+  await entered;
+  await assert.rejects(interviewSessionService.processCandidateAnswer(options), (error) => error.statusCode === 409);
+  release();
+  await assert.rejects(pending, /Simulated outage/);
+  assert.equal(memoryStore.messages.filter((item) => item.sender === 'candidate').length, 0);
+  aiInterviewService.processAnswerWithRepetitionGuard = original;
+  const retried = await interviewSessionService.processCandidateAnswer(options);
+  assert.equal(retried.session.questionHistory.length, 2);
+});
 
 function resetMemoryStore() {
   memoryStore.sessions.length = 0;

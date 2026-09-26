@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Navbar } from './Navbar';
@@ -6,7 +6,13 @@ import { Sidebar } from './Sidebar';
 
 export function DashboardLayout() {
   const location = useLocation();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.matchMedia('(min-width: 1024px)').matches);
+  useEffect(() => {
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const closeOnMobile = (event) => { if (!event.matches) setIsSidebarOpen(false); };
+    desktop.addEventListener('change', closeOnMobile);
+    return () => desktop.removeEventListener('change', closeOnMobile);
+  }, []);
 
   return (
     <div className="app-shell min-h-screen">

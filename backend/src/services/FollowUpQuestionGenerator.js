@@ -1,8 +1,11 @@
+import { technicalAnswerProbe } from './practiceScenarios.service.js';
+
 function strongest(items = []) {
   return items.find(Boolean);
 }
 
 function qualityLevel(extraction = {}) {
+  if (!extraction.isVague && extraction.technologies?.length) return extraction.confidence >= 0.75 ? 'high' : 'medium';
   if (extraction.isVague || extraction.confidence < 0.42) return 'low';
   if (extraction.confidence >= 0.75 && extraction.achievements?.length) return 'high';
   return 'medium';
@@ -59,7 +62,7 @@ function contextualSkillQuestion({ topic, skill, technology, project, style }) {
 
 export const FollowUpQuestionGenerator = {
   generate({ session = {}, currentQuestion = {}, extraction = {}, memory = {}, relatedExchanges = [], answerTranscript = '' }) {
-    const canCross = Number(session.crossQuestionCount || 0) < Number(session.maxCrossQuestions || 2);
+    const canCross = Number(session.crossQuestionCount || 0) < Number(session.maxCrossQuestions ?? 2);
     const reachedLimit = Number(session.currentQuestionIndex || 0) + 1 >= Number(session.totalQuestions || 5);
     const quality = qualityLevel(extraction);
     const topic = currentQuestion?.topic || strongest(extraction.skills) || strongest(extraction.technologies) || session.currentTopic || 'that topic';
@@ -88,14 +91,18 @@ export const FollowUpQuestionGenerator = {
       return null;
     }
 
+    const technical = ['core_cse', 'dsa'].includes(session.interviewType);
+    const probe = technical ? technicalAnswerProbe(answerTranscript, topic, session.crossQuestionCount || 0) : null;
+    if (probe) return { ...probe, decision: 'ASK_FOLLOWUP', questionType: 'followup', subject, expectedConcepts: ['reasoning', 'edge cases'], reasoning: 'Probe a specific technical statement in the candidate answer.' };
+
     if (quality === 'low') {
       return {
         decision: 'ASK_CLARIFICATION',
-        questionText: `Can you make that more concrete for ${topic}: what did you personally do, what constraint mattered most, and what was the result?`,
+        questionText: technical ? `Walk through a small example of your approach to ${topic}, explaining the key step.` : `Can you make that more concrete for ${topic}: what action did you personally take?`,
         questionType: 'clarification',
         topic,
         subject,
-        expectedConcepts: ['specific ownership', 'constraint', 'result'],
+        expectedConcepts: technical ? ['example', 'reasoning'] : ['specific ownership', 'action'],
         reasoning: 'Answer was vague or low-confidence after keyword extraction.',
       };
     }

@@ -1,5 +1,96 @@
 @import "tailwindcss";
 
+/* Focused interview workspace: shared theme tokens keep both themes readable. */
+.interview-studio { max-width: 1440px; margin: 0 auto; color: var(--text-primary); }
+.studio-header, .studio-brand, .studio-header-meta, .studio-clock, .studio-live { display: flex; align-items: center; }
+.studio-header { justify-content: space-between; gap: 20px; padding: 5px 0 26px; border-bottom: 1px solid var(--border-primary); }
+.studio-brand { gap: 14px; }
+.studio-logo { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px; color: var(--accent-text); background: var(--accent-soft); }
+.studio-eyebrow { font-size: 10px; letter-spacing: .15em; font-weight: 700; color: var(--text-secondary); }
+.studio-header h1 { font-size: clamp(18px, 2vw, 24px); font-weight: 650; letter-spacing: -.035em; margin-top: 3px; }
+.studio-header-meta { gap: 22px; font-size: 12px; }
+.studio-clock { gap: 8px; padding: 9px 13px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 8px; }
+.studio-live { gap: 7px; color: var(--accent-text); }
+.studio-live i, .studio-mode > i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+.studio-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 28px; padding-top: 26px; }
+.studio-main { min-width: 0; }
+.studio-progress { display: flex; align-items: center; gap: 18px; font-size: 11px; color: var(--text-secondary); margin-bottom: 20px; }
+.studio-progress > div { flex: 1; height: 4px; background: var(--border-primary); border-radius: 4px; overflow: hidden; }
+.studio-progress i { display: block; height: 100%; background: var(--accent); transition: width .4s ease; }
+.studio-progress > span:last-child { text-transform: capitalize; }
+.studio-question-panel { background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 18px; padding: 28px 30px 20px; box-shadow: var(--shadow-card); }
+.studio-interviewer { display: flex; gap: 12px; align-items: center; margin-bottom: 36px; }
+.studio-avatar { position: relative; display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px; background: #153e38; color: #a1e3cb; font-size: 22px; font-weight: 500; }
+.studio-avatar span { position: absolute; bottom: -1px; right: -1px; width: 12px; height: 12px; background: #4ade80; border: 3px solid var(--bg-secondary); border-radius: 50%; }
+.studio-interviewer h2 { font-size: 14px; font-weight: 600; }
+.studio-interviewer h2 span { font-size: 8px; letter-spacing: .09em; margin-left: 8px; color: var(--text-secondary); border: 1px solid var(--border-primary); padding: 3px 5px; border-radius: 4px; }
+.studio-interviewer p { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+.studio-wave { display: flex; align-items: center; gap: 3px; margin-left: auto; height: 38px; opacity: .5; }
+.studio-wave i { display: block; width: 3px; border-radius: 3px; background: var(--accent); }
+.studio-wave.is-active i { animation: studio-wave 1s ease-in-out infinite alternate; }
+@keyframes studio-wave { from { transform: scaleY(.3); } to { transform: scaleY(1); } }
+.studio-question-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; font-size: 10px; }
+.studio-question-meta span:first-child { display: flex; align-items: center; gap: 6px; color: var(--accent-text); font-weight: 600; }
+.studio-question-meta span:last-child { border-left: 1px solid var(--border-primary); padding-left: 12px; color: var(--text-secondary); }
+.studio-question { font-size: clamp(20px, 2.1vw, 30px); font-weight: 500; letter-spacing: -.035em; line-height: 1.55; min-height: 135px; overflow-wrap: anywhere; }
+.studio-question-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border-top: 1px solid var(--border-primary); margin-top: 26px; padding-top: 17px; font-size: 11px; color: var(--text-secondary); }
+.studio-question-footer button, .studio-controls button { display: flex; align-items: center; gap: 7px; }
+.studio-answer-panel { margin-top: 20px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 16px; overflow: hidden; }
+.studio-answer-panel.is-listening { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.studio-answer-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 21px 24px 0; }
+.studio-answer-header h2 { font-size: 14px; font-weight: 600; }
+.studio-answer-header span { font-size: 10px; color: var(--text-secondary); }
+.studio-answer-panel textarea { width: 100%; min-height: 175px; padding: 18px 24px; background: transparent; color: var(--text-primary); line-height: 1.8; font-size: 14px; border: none; resize: vertical; outline-offset: -4px; }
+.studio-answer-panel textarea::placeholder { color: var(--text-secondary); opacity: .7; }
+.studio-answer-footer { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--border-primary); }
+.studio-record, .studio-submit { display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9px; font-size: 12px; padding: 11px 14px; font-weight: 600; }
+.studio-record { background: var(--bg-primary); border: 1px solid var(--border-primary); }
+.studio-record.recording { color: var(--danger-text); background: var(--danger-soft); }
+.studio-submit { background: var(--accent); color: var(--text-inverse); }
+.studio-word-count { margin-right: auto; color: var(--text-secondary); font-size: 10px; }
+.studio-bottom-note { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-top: 13px; font-size: 10px; color: var(--text-secondary); }
+.studio-bottom-note > span:first-child { display: flex; align-items: center; gap: 6px; }
+.studio-sidebar { display: flex; flex-direction: column; gap: 18px; }
+.studio-session-card { padding: 23px; border-radius: 15px; background: var(--bg-secondary); border: 1px solid var(--border-primary); }
+.studio-session-card h2 { font-size: 23px; line-height: 1.35; font-weight: 500; letter-spacing: -.04em; margin: 12px 0 24px; }
+.studio-session-card dl { font-size: 11px; }
+.studio-session-card dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; }
+.studio-session-card dt { color: var(--text-secondary); }
+.studio-session-card dd { text-transform: capitalize; text-align: right; }
+.studio-mode { display: flex; gap: 9px; padding: 14px 12px; border-radius: 8px; background: var(--accent-soft); margin-top: 16px; }
+.studio-mode > i { margin-top: 5px; }
+.studio-mode strong { font-size: 11px; font-weight: 600; color: var(--accent-text); }
+.studio-mode p { font-size: 10px; line-height: 1.6; margin-top: 4px; color: var(--text-secondary); }
+.studio-mode.practice { background: var(--warning-soft); }
+.studio-mode.practice strong { color: var(--warning-text); }
+.studio-mode.practice > i { background: var(--warning-text); }
+.studio-conversation { border: 1px solid var(--border-primary); border-radius: 14px; overflow: hidden; }
+.studio-conversation > h2 { display: flex; justify-content: space-between; padding: 17px 20px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border-primary); }
+.studio-conversation > h2 span { color: var(--text-secondary); }
+.studio-conversation-empty { padding: 28px 20px; color: var(--text-secondary); font-size: 11px; line-height: 1.7; }
+.studio-conversation-empty svg { margin-bottom: 12px; color: var(--accent); }
+.studio-conversation-empty span { font-size: 10px; }
+.studio-exchanges { max-height: 300px; overflow-y: auto; }
+.studio-exchanges details { padding: 14px 18px; border-bottom: 1px solid var(--border-primary); }
+.studio-exchanges summary { display: flex; align-items: center; gap: 10px; font-size: 11px; cursor: pointer; }
+.studio-exchanges summary svg { margin-left: auto; flex-shrink: 0; }
+.studio-exchange-number { font-size: 10px; color: var(--accent-text); }
+.studio-exchanges small { display: block; margin-top: 3px; font-size: 9px; color: var(--text-secondary); }
+.studio-exchanges p, .studio-exchanges blockquote { margin-top: 12px; font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.studio-exchanges blockquote { border-left: 2px solid var(--accent); padding-left: 10px; color: var(--text-secondary); }
+.studio-controls { display: flex; justify-content: center; gap: 24px; font-size: 11px; color: var(--text-secondary); }
+.studio-end { display: flex; align-items: center; justify-content: center; gap: 9px; padding: 12px; border: 1px solid var(--border-primary); border-radius: 9px; font-size: 11px; }
+.studio-finish-confirm { padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 10px; font-size: 12px; line-height: 1.6; }
+.studio-finish-confirm button { margin-top: 12px; width: 100%; }
+.studio-notice { margin: 8px 20px; padding: 12px; border-radius: 8px; color: var(--warning-text); background: var(--warning-soft); font-size: 12px; line-height: 1.6; }
+.studio-input-hint { padding: 0 24px 12px; font-size: 11px; color: var(--text-secondary); }
+.interview-studio button { cursor: pointer; transition: opacity .15s, background .15s; }
+.interview-studio button:disabled { opacity: .45; cursor: not-allowed; }
+.interview-studio button:focus-visible, .interview-studio summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@media (max-width: 1100px) { .studio-layout { grid-template-columns: minmax(0, 1fr); } .studio-sidebar { display: grid; grid-template-columns: 1fr 1fr; align-items: start; } }
+@media (max-width: 640px) { .studio-header { align-items: flex-start; flex-direction: column; gap: 14px; } .studio-header-meta { width: 100%; justify-content: space-between; } .studio-question-panel { padding: 20px; } .studio-question { min-height: 100px; } .studio-sidebar { display: flex; } .studio-answer-footer { flex-wrap: wrap; padding: 14px; } .studio-submit { flex: 1; } .studio-word-count { margin-left: auto; margin-right: 0; } .studio-answer-header, .studio-answer-panel textarea { padding-left: 18px; padding-right: 18px; } }
+@media (prefers-reduced-motion: reduce) { .studio-wave.is-active i { animation: none; } .studio-progress i { transition: none; } }
+
 /* ─── Design Token System ─── */
 :root {
   /* Surfaces */

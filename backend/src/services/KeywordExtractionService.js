@@ -122,7 +122,7 @@ export const KeywordExtractionService = {
 
     const skills = unique([
       ...SKILL_PATTERNS.filter(({ pattern }) => pattern.test(answer)).map(({ skill }) => skill),
-      ...(question.expectedConcepts || []),
+      ...(question.expectedConcepts || []).filter((concept) => lower.includes(String(concept).toLowerCase())),
     ]).slice(0, 12);
 
     const experienceClaims = extractMatches(answer, EXPERIENCE_PATTERNS).slice(0, 8);
@@ -146,7 +146,7 @@ export const KeywordExtractionService = {
       projectNames,
       specificity,
       confidence: Math.max(0.1, Math.min(0.98, specificity - vagueSignals * 0.12 + 0.3)),
-      isVague: vagueSignals >= 2 || specificity < 0.28,
+      isVague: vagueSignals >= 2 || (specificity < 0.28 && !technologies.length && !skills.length),
     };
   },
 };

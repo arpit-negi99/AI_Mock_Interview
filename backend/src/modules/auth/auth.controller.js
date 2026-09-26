@@ -153,6 +153,12 @@ export const authController = {
     const email = payload.email.toLowerCase();
     const existing = await userRepository.findByEmail(email);
     if (existing?.isVerified) throw new AppError('Email is already registered', 409);
+    if (existing?.otpExpiresAt && new Date(existing.otpExpiresAt).getTime() > Date.now()) {
+      return successResponse(res, {
+        message: 'Verification OTP already sent to email',
+        data: { expiresInMinutes: OTP_TTL_MINUTES },
+      });
+    }
 
     const hashedPassword = await bcrypt.hash(payload.password, 12);
     const { otp, data: otpData } = await createOtpData('register');
@@ -241,7 +247,7 @@ export const authController = {
     const { email } = req.validated.body;
     const user = await userRepository.findByEmail(email);
     if (!user || user.isActive === false) {
-      return successResponse(res, { message: 'If that email exists, a reset OTP has been generated' });
+      return successResponse(res, { message: 'If an active account exists for this email, a password reset code has been sent.', data: { expiresInMinutes: OTP_TTL_MINUTES } });
     }
 
     const { otp, data: otpData } = await createOtpData('reset-password');
@@ -255,7 +261,7 @@ export const authController = {
     });
 
     return successResponse(res, {
-      message: 'Password reset OTP sent to email',
+      message: 'If an active account exists for this email, a password reset code has been sent.',
       data: { expiresInMinutes: OTP_TTL_MINUTES },
     });
   }),
@@ -268,6 +274,9 @@ export const authController = {
     await assertValidOtp(user, otp, 'reset-password');
     await userRepository.updateById(user.id || user._id.toString(), {
       password: await bcrypt.hash(password, 12),
+      refreshTokenHash: null,
+      refreshTokenExpiresAt: null,
+      csrfTokenHash: null,
       otpHash: null,
       otpPurpose: null,
       otpExpiresAt: null,

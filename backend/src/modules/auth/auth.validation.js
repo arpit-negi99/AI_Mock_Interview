@@ -4,7 +4,7 @@ import { ROLES } from '../../constants/roles.js';
 export const registerSchema = z.object({
   body: z.object({
     name: z.string().min(2),
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
     password: z.string().min(8),
     role: z.enum(Object.values(ROLES)).optional(),
   }),
@@ -14,7 +14,7 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   body: z.object({
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
     password: z.string().min(8),
     rememberMe: z.boolean().optional(),
   }),
@@ -24,7 +24,7 @@ export const loginSchema = z.object({
 
 export const verifyRegistrationSchema = z.object({
   body: z.object({
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
     otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6 digit code'),
   }),
   params: z.object({}).optional(),
@@ -33,7 +33,7 @@ export const verifyRegistrationSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   body: z.object({
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
   }),
   params: z.object({}).optional(),
   query: z.object({}).optional(),
@@ -41,7 +41,7 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   body: z.object({
-    email: z.string().email(),
+    email: z.string().trim().toLowerCase().email(),
     otp: z.string().regex(/^\d{6}$/, 'OTP must be a 6 digit code'),
     password: z.string().min(8),
   }),

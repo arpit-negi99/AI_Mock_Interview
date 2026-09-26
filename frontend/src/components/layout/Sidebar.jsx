@@ -81,6 +81,7 @@ export function Sidebar({ onClose }) {
             <motion.div key={to} custom={index} variants={navItemVariants} initial="hidden" animate="show">
               <NavLink
                 to={to}
+                onClick={() => { if (!window.matchMedia('(min-width: 1024px)').matches) onClose(); }}
                 className={() => cn('flex min-h-11 items-center gap-4 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200')}
                 style={({ isActive }) => ({
                   color: isActive ? 'var(--accent-text)' : 'var(--text-secondary)',

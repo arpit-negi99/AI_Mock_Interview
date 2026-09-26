@@ -1,6 +1,7 @@
 import { isDbConnected } from '../../config/db.js';
 import { memoryStore } from '../../utils/memoryStore.js';
 import { User } from './user.model.js';
+import { isObjectIdOrHexString } from 'mongoose';
 
 export const userRepository = {
   async create(data) {
@@ -22,6 +23,9 @@ export const userRepository = {
   },
   async findById(id, includeSession = false) {
     if (isDbConnected()) {
+      // Tokens from the temporary store cannot identify MongoDB users.
+      // Treat them as missing users so auth returns 401, not a CastError/500.
+      if (!isObjectIdOrHexString(id)) return null;
       const query = User.findById(id);
       if (includeSession) query.select('+refreshTokenHash +refreshTokenExpiresAt +csrfTokenHash');
       return query;
@@ -30,6 +34,7 @@ export const userRepository = {
   },
   async updateById(id, data) {
     if (isDbConnected()) {
+      if (!isObjectIdOrHexString(id)) return null;
       return User.findByIdAndUpdate(id, data, { returnDocument: 'after' });
     }
     const index = memoryStore.users.findIndex((user) => user.id === id);
@@ -39,6 +44,7 @@ export const userRepository = {
   },
   async deleteById(id) {
     if (isDbConnected()) {
+      if (!isObjectIdOrHexString(id)) return null;
       return User.findByIdAndDelete(id);
     }
     const index = memoryStore.users.findIndex((user) => user.id === id);

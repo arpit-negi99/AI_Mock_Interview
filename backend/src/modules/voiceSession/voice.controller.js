@@ -13,12 +13,13 @@ export const voiceController = {
     emitToSession(req.params.sessionId, 'interview:thinking', { state: 'processing' });
     const session = await interviewSessionService.ensureOwnSession(req.params.sessionId, req.user);
     if (session.status !== INTERVIEW_STATUS.ACTIVE) throw new AppError('Interview session is not active', 409);
-    const transcript = req.body.transcript || (await speechToTextService.transcribe({ file: req.file, fallbackText: req.body.fallbackText })).transcript;
+    const transcript = req.validated.body.transcript || (await speechToTextService.transcribe({ file: req.file, fallbackText: req.validated.body.fallbackText })).transcript;
     const result = await interviewSessionService.processCandidateAnswer({
       sessionId: req.params.sessionId,
       user: req.user,
       transcript,
       audioUrl: toPublicFileUrl(req.file),
+      expectedQuestionCount: req.validated?.body?.expectedQuestionCount,
     });
     const normalizedType = result.questionType || result.aiResult?.questionType;
     const event = result.ended

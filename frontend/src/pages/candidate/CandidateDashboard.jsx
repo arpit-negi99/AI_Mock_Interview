@@ -185,7 +185,6 @@ export default function CandidateDashboard() {
 
   useEffect(() => {
     let active = true;
-    setIsLoading(true);
     interviewService.getAnalytics({ range })
       .then((response) => {
         if (active) setAnalytics(response.data);
@@ -249,7 +248,7 @@ export default function CandidateDashboard() {
           <button
             key={item.value}
             type="button"
-            onClick={() => setRange(item.value)}
+            onClick={() => { if (item.value !== range) { setIsLoading(true); setRange(item.value); } }}
             className="rounded-lg border px-3 py-2 text-sm font-medium"
             style={{
               borderColor: range === item.value ? 'var(--accent)' : 'var(--border-primary)',

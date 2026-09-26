@@ -7,8 +7,9 @@ process.env.REFRESH_TOKEN_SECRET = 'auth-test-refresh-secret';
 process.env.JWT_EXPIRES_IN = '1s';
 process.env.REFRESH_TOKEN_EXPIRES_IN = '7d';
 
-const [{ default: bcrypt }, { createApp }, { ROLES }, { memoryStore }] = await Promise.all([
+const [{ default: bcrypt }, { default: jwt }, { createApp }, { ROLES }, { memoryStore }] = await Promise.all([
   import('bcryptjs'),
+  import('jsonwebtoken'),
   import('../src/app.js'),
   import('../src/constants/roles.js'),
   import('../src/utils/memoryStore.js'),
@@ -83,6 +84,21 @@ test('register creates a pending account and prevents duplicate verified account
   assert.equal(memoryStore.users.length, 1);
   assert.equal(memoryStore.users[0].isVerified, false);
   assert.ok(memoryStore.users[0].password);
+  const pendingOtpHash = memoryStore.users[0].otpHash;
+
+  const pendingDuplicate = await request(server, '/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: 'New Candidate',
+      email: 'new@example.com',
+      password: 'password123',
+    }),
+  });
+
+  assert.equal(pendingDuplicate.response.status, 200);
+  assert.equal(pendingDuplicate.body.message, 'Verification OTP already sent to email');
+  assert.equal(memoryStore.users.length, 1);
+  assert.equal(memoryStore.users[0].otpHash, pendingOtpHash);
 
   memoryStore.users[0].isVerified = true;
   const duplicate = await request(server, '/auth/register', {
@@ -136,6 +152,25 @@ test('login rejects invalid credentials and unverified accounts', async (t) => {
   });
   assert.equal(unverified.response.status, 403);
   assert.equal(unverified.body.message, 'Please verify your email before signing in');
+});
+
+test('me returns 401 instead of 500 for an expired access token', async (t) => {
+  resetUsers();
+  const server = createServer();
+  t.after(() => server.close());
+  const { user } = await seedVerifiedUser({ email: 'expired@example.com' });
+  const expiredToken = jwt.sign(
+    { id: user.id, role: user.role, email: user.email },
+    process.env.JWT_SECRET,
+    { expiresIn: '-1s' },
+  );
+
+  const { response, body } = await request(server, '/auth/me', {
+    headers: { Authorization: `Bearer ${expiredToken}` },
+  });
+
+  assert.equal(response.status, 401);
+  assert.equal(body.message, 'Session expired. Please sign in again.');
 });
 
 test('refresh token persists sessions and rotates access credentials', async (t) => {

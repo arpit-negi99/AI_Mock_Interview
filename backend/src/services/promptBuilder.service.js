@@ -22,12 +22,12 @@ function serializeSyllabus(syllabusDocuments = []) {
 function historyBlock(session) {
   const history = session.questionHistory || [];
   if (!history.length) return 'No previous exchanges.';
-  return history.map((item, index) => [
+  return history.slice(-12).map((item, index) => [
     `Exchange ${index + 1}`,
     `Question: ${item.questionText}`,
     `Type: ${item.questionType || 'main'}`,
     `Topic: ${item.topic || 'unknown'}`,
-    `Answer: ${item.answerTranscript || 'Not answered yet'}`,
+    `Answer: ${(item.answerTranscript || 'Not answered yet').slice(0, 4000)}`,
   ].join('\n')).join('\n\n');
 }
 
@@ -82,6 +82,11 @@ function interviewerPersona(session) {
     'Your tone is professional, warm, natural, and spoken. Use brief acknowledgments and transitions, but do not grade the candidate in real time.',
     'Keep every question speakable in 1-3 sentences. Never use markdown, bullet points, numbered lists, code blocks, or written-only formatting in questionText.',
     'Probe vague answers, challenge strong answers with realistic constraints, and gently clarify contradictions from earlier answers.',
+    `Candidate level: ${session.experienceLevel || 'intermediate'}. Requested difficulty: ${session.difficulty || 'medium'}. Respect this baseline; adapt one step at a time.`,
+    `Prioritize selected topics: ${(session.selectedTopics || []).join(', ') || 'the provided syllabus'}.`,
+    'Ask exactly one focused question, at most 65 words. Avoid stacking three or more requests into a single turn. Use concrete scenarios rather than definition-only trivia.',
+    'For follow-ups, anchor to one exact claim, decision, missing explanation, or contradiction in the latest answer. Never say the candidate mentioned something that appears only in the expected concepts or syllabus.',
+    'Probe in stages: clarify reasoning, then test a tradeoff or failure case. Do not repeat an already answered probe. If the candidate explicitly asks to move on or does not know, move to the next topic.',
     'Start easier, then adapt difficulty from the candidate response quality. For struggling answers, test fundamentals and offer a small hint.',
     session.interviewType === 'resume'
       ? 'Resume mode is active. Reference specific projects, skills, achievements, or roles from the resume whenever possible, and test whether claims are authentic and deep.'
@@ -139,7 +144,7 @@ export const promptBuilder = {
       subject: 'subject being addressed',
       expectedConcepts: [],
       answerEvaluation: {
-        score: '0-10',
+        score: 5,
         strengths: ['what the candidate did well'],
         gaps: ['what was missing'],
         brief: 'one sentence evaluation for the report',
@@ -171,6 +176,8 @@ export const promptBuilder = {
       'Available remaining syllabus:',
       JSON.stringify(remaining, null, 2),
       `Topics already covered: ${(session.askedTopics || []).join(', ') || 'none'}.`,
+      'Scoring rubric (0-10): 0-2 incorrect/no relevant evidence, 3-4 partial understanding with major gaps, 5-6 mostly correct with missing reasoning, 7-8 correct and well justified, 9-10 precise reasoning with relevant tradeoffs and edge cases. Use the full range. Do not infer correctness, confidence, or seniority from answer length or buzzwords. State a specific observed strength and a specific missing concept; do not fabricate feedback for absent evidence.',
+      'Use one generation for both answer evaluation and the next question. Feedback is saved for the report, not spoken before the next question.',
       'Decision rules: ASK_FOLLOWUP for incomplete/vague answers or newly introduced skills/technologies when cross-question limit permits. ASK_CLARIFICATION for vague, contradictory, low-confidence, or unverifiable claims. Use related prior exchanges to connect answers instead of asking independent questions. Increase difficulty only when confidence and topic depth are strong. NEXT_QUESTION for adequate answers or when cross-question limit is reached. END_INTERVIEW when all topics are covered, question limit is reached, or duration elapsed.',
       jsonOnlyInstruction(schema),
     ].filter(Boolean).join('\n\n');
@@ -188,6 +195,7 @@ export const promptBuilder = {
 
     return [
       'Generate a final voice mock interview evaluation from the full session record.',
+      'Assess only answered questions. Tie feedback to specific exchanges. Do not infer personality or employability. If evaluation notes have source heuristic, describe those scores as provisional practice estimates. Give three concrete exercises targeting observed gaps, with a way to check progress.',
       `Adaptive profile: ${adaptiveProfile(session)}.`,
       'Resume context:',
       resumeContextBlock(session),

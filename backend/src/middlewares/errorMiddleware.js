@@ -3,11 +3,12 @@ import { logger } from '../config/logger.js';
 
 export function errorMiddleware(error, req, res, _next) {
   const statusCode = error.statusCode || 500;
-  logger.error(error.message, {
+  const log = statusCode >= 500 ? logger.error.bind(logger) : logger.warn.bind(logger);
+  log(error.message, {
     statusCode,
     requestId: req.requestId,
     path: req.originalUrl,
-    stack: error.stack,
+    stack: statusCode >= 500 ? error.stack : undefined,
   });
 
   res.status(statusCode).json({

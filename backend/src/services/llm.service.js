@@ -51,14 +51,17 @@ export function parseLlmJson(raw, fallback = null) {
   return parseGeminiJson(raw, fallback);
 }
 
-export async function generateLlmJson(prompt, { systemInstruction, temperature = 0.7 } = {}) {
+export async function generateLlmJson(prompt, { systemInstruction, temperature = 0.5, responseSchema, validate } = {}) {
   const candidates = buildModelCandidates();
   const failures = [];
+  const deadline = Date.now() + env.aiTotalTimeoutMs;
 
   for (const candidate of candidates) {
+    if (Date.now() >= deadline) break;
     try {
-      const raw = await generateWithCandidate(candidate, { prompt, systemInstruction, temperature });
-      if (!parseGeminiJson(raw, null)) {
+      const raw = await generateWithCandidate(candidate, { prompt, systemInstruction, temperature, responseSchema, deadline });
+      const parsed = parseGeminiJson(raw, null);
+      if (!parsed || (validate && !validate(parsed))) {
         throw new AppError('LLM returned invalid JSON', 502, candidate);
       }
       logger.info('LLM call succeeded', { provider: candidate.provider, model: candidate.model });
